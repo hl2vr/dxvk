@@ -204,7 +204,8 @@ namespace dxvk {
         return hr;
     } else if (sampleCount != VK_SAMPLE_COUNT_1_BIT) {
       // D3D9 only supports MSAA for surfaces
-      return D3DERR_INVALIDCALL;
+      // but we need it for HL2VR, anyway, since we are hacking in MSAA support
+      //return D3DERR_INVALIDCALL;
     }
 
     // Using MANAGED pool with DYNAMIC usage is illegal
@@ -705,7 +706,8 @@ namespace dxvk {
           UINT                   Lod,
           VkImageUsageFlags      UsageFlags,
           VkImageLayout          Layout,
-          bool                   Srgb) {
+          bool                   Srgb,
+          bool                   Resolved) {
     DxvkImageViewKey viewInfo;
     viewInfo.format    = m_mapping.ConversionFormatInfo.FormatColor != VK_FORMAT_UNDEFINED
                        ? PickSRGB(m_mapping.ConversionFormatInfo.FormatColor, m_mapping.ConversionFormatInfo.FormatSrgb, Srgb)
@@ -734,7 +736,7 @@ namespace dxvk {
       viewInfo.packedSwizzle = 0u;
 
     // Create the underlying image view object
-    return GetImage()->createView(viewInfo);
+    return (Resolved ? GetResolveImage() : GetImage())->createView(viewInfo);
   }
 
 
@@ -800,7 +802,7 @@ namespace dxvk {
     return DxvkBufferSlice(GetBuffer(), m_memoryOffset[Subresource], GetMipSize(Subresource));
   }
 
-  
+
   uint32_t D3D9CommonTexture::GetPlaneCount() const {
     const DxvkFormatInfo* formatInfo = m_mapping.FormatColor != VK_FORMAT_UNDEFINED
       ? lookupFormatInfo(m_mapping.FormatColor)

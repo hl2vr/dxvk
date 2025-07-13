@@ -60,7 +60,7 @@ namespace dxvk {
         LSTATUS status;
 
         if ((status = RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Wine\\VR", 0, KEY_READ, &m_vr_key)))
-            Logger::info(str::format("OpenVR: could not open registry key, status ", status));
+            ; //Logger::info(str::format("OpenVR: could not open registry key, status ", status));
     }
 
     if (!m_vr_key && !m_compositor)
@@ -266,11 +266,11 @@ namespace dxvk {
 
       // If the app has not initialized OpenVR yet, we need
       // to do it now in order to grab a compositor instance
-      g_vrFunctions.initInternal(&error, vr::VRApplication_Background);
+      g_vrFunctions.initInternal(&error, vr::VRApplication_Scene);
       m_initializedOpenVr = error == vr::VRInitError_None;
 
       if (error != vr::VRInitError_None) {
-        Logger::warn("OpenVR: Failed to initialize OpenVR");
+        Logger::warn(str::format("OpenVR: Failed to initialize OpenVR: ", error));
         return nullptr;
       }
 
@@ -313,7 +313,7 @@ namespace dxvk {
     // Use openvr_api.dll only if already loaded in the process (and reference it which GetModuleHandleEx does without
     // GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT flag).
     if (!::GetModuleHandleEx(0, "openvr_api.dll", &handle))
-      handle = ::LoadLibrary("openvr_api_dxvk.dll");
+      handle = ::LoadLibrary("openvr_api.dll");
 
     m_loadedOvrApi = handle != nullptr;
     return handle;
