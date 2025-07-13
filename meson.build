@@ -123,7 +123,7 @@ if platform == 'windows'
     )
   endif
 
-  dxvk_name_prefix = ''
+  dxvk_name_prefix = 'dxvk_'
   compiler_args += ['-DDXVK_WSI_WIN32']
 else
   dxvk_abi_version = '0'

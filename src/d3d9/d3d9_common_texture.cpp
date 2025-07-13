@@ -651,7 +651,8 @@ namespace dxvk {
           UINT                   Lod,
           VkImageUsageFlagBits   UsageFlags,
           VkImageLayout          Layout,
-          bool                   Srgb) {
+          bool                   Srgb,
+          bool                   Resolved) {
     DxvkImageViewKey viewInfo;
     viewInfo.format    = m_mapping.ConversionFormatInfo.FormatColor != VK_FORMAT_UNDEFINED
                        ? PickSRGB(m_mapping.ConversionFormatInfo.FormatColor, m_mapping.ConversionFormatInfo.FormatSrgb, Srgb)
@@ -667,7 +668,7 @@ namespace dxvk {
     viewInfo.packedSwizzle = DxvkImageViewKey::packSwizzle(m_mapping.Swizzle);
 
     // Remove the stencil aspect if we are trying to create a regular image
-    // view of a depth stencil format 
+    // view of a depth stencil format
     if (UsageFlags != VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
       viewInfo.aspects &= ~VK_IMAGE_ASPECT_STENCIL_BIT;
 
@@ -680,7 +681,7 @@ namespace dxvk {
       viewInfo.packedSwizzle = 0u;
 
     // Create the underlying image view object
-    return GetImage()->createView(viewInfo);
+    return (Resolved ? GetResolveImage() : GetImage())->createView(viewInfo);
   }
 
 
@@ -738,7 +739,7 @@ namespace dxvk {
     return DxvkBufferSlice(GetBuffer(), m_memoryOffset[Subresource], GetMipSize(Subresource));
   }
 
-  
+
   uint32_t D3D9CommonTexture::GetPlaneCount() const {
     const DxvkFormatInfo* formatInfo = m_mapping.FormatColor != VK_FORMAT_UNDEFINED
       ? lookupFormatInfo(m_mapping.FormatColor)
