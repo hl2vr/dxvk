@@ -23,13 +23,20 @@
 #include "../util/util_bit.h"
 #include "../util/util_math.h"
 
+#include "../../include/openvr/openvr.hpp"
+
 #include "d3d9_initializer.h"
+
+#include "VkSubmitThreadCallback.h"
+#include "../hl2vr/OpenVRDirectMode.h"
 
 #include <algorithm>
 #include <cfloat>
 #ifdef MSC_VER
 #pragma fenv_access (on)
 #endif
+
+VkSubmitThreadCallback *g_pVkSubmitThreadCallback = nullptr;
 
 namespace dxvk {
 
@@ -197,6 +204,8 @@ namespace dxvk {
     BindFFUbershader<DxsoProgramType::PixelShader>();
 
     m_unlockAdditionalFormats = m_parent->HasFormatsUnlocked();
+
+    g_pVkSubmitThreadCallback = OpenVRDirectMode::Get();
   }
 
 
@@ -666,7 +675,7 @@ namespace dxvk {
     desc.Format             = EnumerateFormat(Format);
     desc.Pool               = Pool;
     desc.Discard            = FALSE;
-    desc.MultiSample        = D3DMULTISAMPLE_NONE;
+    desc.MultiSample        = (D3DMULTISAMPLE_TYPE)OpenVRDirectMode::Get()->DetermineMSAA(Width, Height);
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
@@ -1794,6 +1803,10 @@ namespace dxvk {
         m_dirty.set(D3D9DeviceDirtyFlag::MultiSampleState);
         m_dirty.set(D3D9DeviceDirtyFlag::AlphaTestState);
       }
+    }
+
+    if (rt != nullptr) {
+      OpenVRDirectMode::Get()->OnRenderTargetChanged(GetDXVKDevice(), rt);
     }
 
     return D3D_OK;
@@ -4317,12 +4330,18 @@ namespace dxvk {
       }
     }
 
-    return m_implicitSwapchain->Present(
+    OpenVRDirectMode::Get()->PrePresent(this);
+
+    HRESULT result = m_implicitSwapchain->Present(
       pSourceRect,
       pDestRect,
       hDestWindowOverride,
       pDirtyRegion,
       dwFlags);
+
+    OpenVRDirectMode::Get()->PostPresent();
+
+    return result;
   }
 
 
@@ -4504,7 +4523,7 @@ namespace dxvk {
     desc.Format             = EnumerateFormat(Format);
     desc.Pool               = D3DPOOL_DEFAULT;
     desc.Discard            = Discard;
-    desc.MultiSample        = MultiSample;
+    desc.MultiSample        = std::max(MultiSample, (D3DMULTISAMPLE_TYPE)OpenVRDirectMode::Get()->DetermineMSAA(Width, Height));
     desc.MultisampleQuality = MultisampleQuality;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = TRUE;
@@ -7530,6 +7549,26 @@ namespace dxvk {
       GetCommonTexture(m_state.textures[StateSampler]);
 
     Rc<DxvkImageView> imageView = commonTex->GetSampleView(srgb);
+
+    // Can only bind a non-multisampled texture; otherwise we need to resolve
+    auto image = commonTex->GetImage();
+    bool needsResolve = image != nullptr && image->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
+    if (needsResolve) {
+      const DxvkFormatInfo* formatInfo = lookupFormatInfo(image->info().format);
+      const VkImageSubresource subresource = commonTex->GetSubresourceFromIndex(formatInfo->aspectMask, 0);
+      VkImageResolve region;
+      region.srcSubresource = {subresource.aspectMask, subresource.mipLevel, subresource.arrayLayer, 1};
+      region.srcOffset = {0, 0, 0};
+      region.dstSubresource = region.srcSubresource;
+      region.dstOffset = {0, 0, 0};
+      region.extent = image->info().extent;
+
+      EmitCs([cDstImage = commonTex->GetResolveImage(), cSrcImage = image,
+                     cRegion = region](DxvkContext *ctx) {
+		ctx->resolveImage(cDstImage, cSrcImage, cRegion, VK_FORMAT_UNDEFINED, VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_AVERAGE_BIT);
+      });
+      imageView = commonTex->GetResolveView(srgb);
+    }
 
     EmitCs([
       cSlot = slot,

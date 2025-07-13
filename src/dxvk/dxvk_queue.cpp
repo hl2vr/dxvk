@@ -1,6 +1,11 @@
 #include "dxvk_device.h"
 #include "dxvk_queue.h"
 
+#include "VkSubmitThreadCallback.h"
+
+extern VkSubmitThreadCallback *g_pVkSubmitThreadCallback;
+
+
 namespace dxvk {
   
   DxvkSubmissionQueue::DxvkSubmissionQueue(DxvkDevice* device, const DxvkQueueCallback& callback)
@@ -155,7 +160,8 @@ namespace dxvk {
           m_callback(true);
 
         if (entry.submit.cmdList != nullptr) {
-          if (entry.latency.tracker) {
+
+			if (entry.latency.tracker) {
             entry.latency.tracker->notifyQueueSubmit(entry.latency.frameId);
 
             if (!trackedSubmitId && entry.latency.frameId > trackedPresentId)
@@ -163,9 +169,14 @@ namespace dxvk {
           }
 
           entry.result = entry.submit.cmdList->submit(
-            m_semaphores, m_timelines, trackedSubmitId);
+				m_semaphores, m_timelines, trackedSubmitId);
           entry.timelines = m_timelines;
         } else if (entry.present.presenter != nullptr) {
+          if (g_pVkSubmitThreadCallback != nullptr)
+          {
+            g_pVkSubmitThreadCallback->PrePresentCallBack();
+          }
+
           if (entry.latency.tracker)
             entry.latency.tracker->notifyQueuePresentBegin(entry.latency.frameId);
 
@@ -178,6 +189,11 @@ namespace dxvk {
 
             trackedPresentId = entry.latency.frameId;
             trackedSubmitId = 0u;
+          }
+
+          if (g_pVkSubmitThreadCallback != nullptr)
+          {
+            g_pVkSubmitThreadCallback->PostPresentCallback();
           }
         }
 
@@ -274,7 +290,7 @@ namespace dxvk {
       } else if (entry.present.presenter != nullptr) {
         // Signal the frame and then immediately destroy the reference.
         // This is necessary since the front-end may want to explicitly
-        // destroy the presenter object. 
+        // destroy the presenter object.
         entry.present.presenter->signalFrame(entry.present.frameId, entry.latency.tracker);
         entry.present.presenter = nullptr;
       }

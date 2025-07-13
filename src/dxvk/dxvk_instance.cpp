@@ -49,7 +49,7 @@ namespace dxvk {
     Logger::info("Extension providers:");
 
     for (const auto& provider : m_extProviders) {
-      Logger::info(str::format("  ", provider->getName()));
+      Logger::info(str::format("  ", provider->getName().data()));
       provider->initInstanceExtensions();
     }
 
