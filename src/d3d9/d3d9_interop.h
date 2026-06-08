@@ -161,4 +161,40 @@ namespace dxvk {
 
   };
 
+  class D3D9VRS final : public ID3D9VRS {
+
+  public:
+
+    D3D9VRS(D3D9DeviceEx* pDevice);
+
+    ~D3D9VRS();
+
+    ULONG STDMETHODCALLTYPE AddRef();
+
+    ULONG STDMETHODCALLTYPE Release();
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID                riid,
+            void**                ppvObject);
+
+    BOOL STDMETHODCALLTYPE IsAvailable();
+
+    HRESULT STDMETHODCALLTYPE SetShadingRateImage(
+            IDirect3DTexture9*    pTexture,
+            VkExtent2D            texelSize);
+
+    HRESULT STDMETHODCALLTYPE Enable();
+
+    HRESULT STDMETHODCALLTYPE Disable();
+
+    VkExtent2D STDMETHODCALLTYPE GetMinTexelSize();
+
+    VkExtent2D STDMETHODCALLTYPE GetMaxTexelSize();
+
+  private:
+
+    D3D9DeviceEx*  m_device;
+
+  };
+
 }

@@ -76,6 +76,7 @@ namespace dxvk {
     VkAttachmentFeedbackLoopInfoEXT depthStencilFeedbackLoop = { };
     VkRenderingAttachmentInfo depth = { };
     VkRenderingAttachmentInfo stencil = { };
+    VkRenderingFragmentShadingRateAttachmentInfoKHR shadingRateAttachment = { };
     VkRenderingInfo rendering = { };
   };
 

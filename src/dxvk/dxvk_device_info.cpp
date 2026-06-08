@@ -60,6 +60,7 @@ namespace dxvk {
     HANDLE_EXT(khrShaderFloatControls2);           \
     HANDLE_EXT(khrShaderSubgroupUniformControlFlow);\
     HANDLE_EXT(khrShaderUntypedPointers);          \
+    HANDLE_EXT(khrFragmentShadingRate);            \
     HANDLE_EXT(khrSwapchain);                      \
     HANDLE_EXT(khrSwapchainMaintenance1);          \
     HANDLE_EXT(khrSwapchainMutableFormat);         \
@@ -87,7 +88,8 @@ namespace dxvk {
     HANDLE_EXT(khrMaintenance6);                   \
     HANDLE_EXT(khrMaintenance7);                   \
     HANDLE_EXT(khrMaintenance9);                   \
-    HANDLE_EXT(khrMaintenance10);
+    HANDLE_EXT(khrMaintenance10);                  \
+    HANDLE_EXT(khrFragmentShadingRate);
 
 
   DxvkDeviceCapabilities::DxvkDeviceCapabilities(
@@ -1018,6 +1020,11 @@ namespace dxvk {
 
       /* Use GENERAL layout for everything */
       ENABLE_EXT_FEATURE(khrUnifiedImageLayouts, unifiedImageLayouts, false),
+
+      /* Variable rate shading */
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, pipelineFragmentShadingRate, false),
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, primitiveFragmentShadingRate, false),
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, attachmentFragmentShadingRate, false),
 
       /* Keyed mutex support in wine */
       ENABLE_EXT(khrWin32KeyedMutex, false),

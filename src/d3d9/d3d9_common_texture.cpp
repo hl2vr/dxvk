@@ -396,11 +396,22 @@ namespace dxvk {
     imageInfo.usage           = VK_IMAGE_USAGE_TRANSFER_SRC_BIT
                               | VK_IMAGE_USAGE_TRANSFER_DST_BIT
                               | m_desc.ImageUsage;
+
+    if (m_desc.Usage & D3DUSAGE_VRS) {
+      imageInfo.usage |= VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+      imageInfo.format = VK_FORMAT_R8_UINT;
+    }
+
     imageInfo.stages          = VK_PIPELINE_STAGE_TRANSFER_BIT
                               | m_device->GetEnabledShaderStages();
     imageInfo.access          = VK_ACCESS_TRANSFER_READ_BIT
                               | VK_ACCESS_TRANSFER_WRITE_BIT
                               | VK_ACCESS_SHADER_READ_BIT;
+
+    if (m_desc.Usage & D3DUSAGE_VRS) {
+      imageInfo.stages |= VK_PIPELINE_STAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+      imageInfo.access |= VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR;
+    }
     imageInfo.tiling          = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.layout          = VK_IMAGE_LAYOUT_GENERAL;
     imageInfo.shared          = m_desc.IsBackBuffer;

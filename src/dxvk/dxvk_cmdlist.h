@@ -1182,6 +1182,14 @@ namespace dxvk {
     }
 
 
+    void cmdSetFragmentShadingRate(
+      const VkExtent2D                        fragmentSize,
+      const VkFragmentShadingRateCombinerOpKHR combinerOps[2]) {
+      m_vkd->vkCmdSetFragmentShadingRateKHR(
+        getCmdBuffer(), &fragmentSize, combinerOps);
+    }
+
+
     void cmdWriteTimestamp(
             DxvkCmdBuffer           cmdBuffer,
             VkPipelineStageFlagBits2 pipelineStage,

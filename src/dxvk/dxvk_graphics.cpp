@@ -526,6 +526,9 @@ namespace dxvk {
     if (m_device->canUseDescriptorBuffer())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    if (m_device->features().khrFragmentShadingRate.attachmentFragmentShadingRate)
+      flags.flags |= VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+
     VkGraphicsPipelineLibraryCreateInfoEXT libInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT, &flags };
     libInfo.flags             = VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT;
 
@@ -801,6 +804,9 @@ namespace dxvk {
       dyStates[dyInfo.dynamicStateCount++] = VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT;
       dyStates[dyInfo.dynamicStateCount++] = VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT;
     }
+
+    if (device->features().khrFragmentShadingRate.pipelineFragmentShadingRate)
+      dyStates[dyInfo.dynamicStateCount++] = VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR;
 
     if (dyInfo.dynamicStateCount)
       dyInfo.pDynamicStates = dyStates.data();
@@ -1366,6 +1372,9 @@ namespace dxvk {
     if (m_device->canUseDescriptorBuffer())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    if (m_device->features().khrFragmentShadingRate.attachmentFragmentShadingRate)
+      flags.flags |= VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+
     VkPipelineLibraryCreateInfoKHR libInfo = { VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR };
     libInfo.libraryCount    = libraries.size();
     libInfo.pLibraries      = libraries.data();
@@ -1440,6 +1449,9 @@ namespace dxvk {
 
     if (m_device->canUseDescriptorBuffer())
       flags.flags |= VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT;
+
+    if (m_device->features().khrFragmentShadingRate.attachmentFragmentShadingRate)
+      flags.flags |= VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
 
     VkGraphicsPipelineCreateInfo info = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, &key.foState.rtInfo };
     info.stageCount               = stageInfo.getStageCount();

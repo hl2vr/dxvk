@@ -43,6 +43,7 @@ namespace dxvk {
     VkPhysicalDeviceMaintenance7PropertiesKHR                 khrMaintenance7                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR };
     VkPhysicalDeviceMaintenance9PropertiesKHR                 khrMaintenance9                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_PROPERTIES_KHR };
     VkPhysicalDeviceMaintenance10PropertiesKHR                khrMaintenance10                = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_10_PROPERTIES_KHR };
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR          khrFragmentShadingRate          = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR };
   };
 
 
@@ -106,6 +107,7 @@ namespace dxvk {
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR          khrSwapchainMaintenance1        = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR };
     VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR            khrUnifiedImageLayouts          = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR };
     VkBool32                                                  khrSwapchainMutableFormat       = VK_FALSE;
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR            khrFragmentShadingRate          = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR };
     VkBool32                                                  khrWin32KeyedMutex              = VK_FALSE;
     VkBool32                                                  nvLowLatency2                   = VK_FALSE;
     VkPhysicalDeviceRawAccessChainsFeaturesNV                 nvRawAccessChains               = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV };
@@ -174,6 +176,7 @@ namespace dxvk {
     VkExtensionProperties khrSwapchain                      = vk::makeExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     VkExtensionProperties khrSwapchainMaintenance1          = vk::makeExtension(VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
     VkExtensionProperties khrSwapchainMutableFormat         = vk::makeExtension(VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME);
+    VkExtensionProperties khrFragmentShadingRate            = vk::makeExtension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
     VkExtensionProperties khrUnifiedImageLayouts            = vk::makeExtension(VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME);
     VkExtensionProperties khrWin32KeyedMutex                = vk::makeExtension(VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME);
     VkExtensionProperties nvLowLatency2                     = vk::makeExtension(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);

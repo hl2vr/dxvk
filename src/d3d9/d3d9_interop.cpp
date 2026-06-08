@@ -6,6 +6,8 @@
 #include "d3d9_buffer.h"
 #include "d3d9_initializer.h"
 
+#include "../dxvk/dxvk_image.h"
+
 namespace dxvk {
 
   ////////////////////////////////
@@ -394,6 +396,106 @@ namespace dxvk {
 
   void STDMETHODCALLTYPE D3D9VkExtInterface::UnlockAdditionalFormats() {
     m_interface->EnableAdditionalFormats();
+  }
+
+  ////////////////////////////////
+  // VRS Interface
+  ///////////////////////////////
+
+  D3D9VRS::D3D9VRS(D3D9DeviceEx* pDevice)
+    : m_device(pDevice) {
+
+  }
+
+  D3D9VRS::~D3D9VRS() {
+
+  }
+
+  ULONG STDMETHODCALLTYPE D3D9VRS::AddRef() {
+    return m_device->AddRef();
+  }
+
+  ULONG STDMETHODCALLTYPE D3D9VRS::Release() {
+    return m_device->Release();
+  }
+
+  HRESULT STDMETHODCALLTYPE D3D9VRS::QueryInterface(
+          REFIID                riid,
+          void**                ppvObject) {
+    return m_device->QueryInterface(riid, ppvObject);
+  }
+
+  BOOL STDMETHODCALLTYPE D3D9VRS::IsAvailable() {
+    return m_device->GetDXVKDevice()->features().khrFragmentShadingRate.attachmentFragmentShadingRate;
+  }
+
+  HRESULT STDMETHODCALLTYPE D3D9VRS::SetShadingRateImage(
+          IDirect3DTexture9*    pTexture,
+          VkExtent2D            texelSize) {
+    if (!IsAvailable())
+      return D3DERR_NOTAVAILABLE;
+
+    if (!pTexture)
+      return D3DERR_INVALIDCALL;
+
+    auto* tex = static_cast<D3D9Texture2D*>(pTexture);
+    auto* commonTex = tex->GetCommonTexture();
+
+    if (!(commonTex->Desc()->Usage & D3DUSAGE_VRS))
+      return D3DERR_INVALIDCALL;
+
+    Rc<DxvkImage> image = commonTex->GetImage();
+
+    DxvkImageViewKey viewKey;
+    viewKey.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewKey.format = image->info().format;
+    viewKey.usage = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+    viewKey.aspects = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewKey.mipIndex = 0u;
+    viewKey.mipCount = 1u;
+    viewKey.layerIndex = 0u;
+    viewKey.layerCount = 1u;
+
+    Rc<DxvkImageView> view = image->createView(viewKey);
+
+    m_device->EmitCs([
+      cView = std::move(view),
+      cTexelSize = texelSize
+    ] (DxvkContext* ctx) {
+      ctx->setFragmentShadingRate(cView, cTexelSize);
+    });
+
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE D3D9VRS::Enable() {
+    if (!IsAvailable())
+      return D3DERR_NOTAVAILABLE;
+
+    m_device->EmitCs([cEnable = true] (DxvkContext* ctx) {
+      ctx->setFragmentShadingRateEnabled(cEnable);
+    });
+
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE D3D9VRS::Disable() {
+    if (!IsAvailable())
+      return D3DERR_NOTAVAILABLE;
+
+    m_device->EmitCs([cEnable = false] (DxvkContext* ctx) {
+      ctx->setFragmentShadingRateEnabled(cEnable);
+    });
+
+    return S_OK;
+  }
+
+  VkExtent2D STDMETHODCALLTYPE D3D9VRS::GetMinTexelSize() {
+    return m_device->GetDXVKDevice()->properties().khrFragmentShadingRate.minFragmentShadingRateAttachmentTexelSize;
+  }
+
+  VkExtent2D STDMETHODCALLTYPE D3D9VRS::GetMaxTexelSize() {
+    return m_device->GetDXVKDevice()->properties().khrFragmentShadingRate.maxFragmentShadingRateAttachmentTexelSize;
   }
 
 }

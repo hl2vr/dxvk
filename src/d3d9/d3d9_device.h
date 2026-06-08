@@ -227,6 +227,7 @@ namespace dxvk {
     friend class D3D9UserDefinedAnnotation;
     friend class DxvkD3D8Bridge;
     friend D3D9VkInteropDevice;
+    friend D3D9VRS;
   public:
 
     D3D9DeviceEx(
@@ -1714,6 +1715,7 @@ namespace dxvk {
     Direct3DState9                  m_state;
 
     D3D9VkInteropDevice             m_d3d9Interop;
+    D3D9VRS                         m_d3d9VRS;
     D3D9ON12_ARGS                   m_d3d9On12Args = { };
     D3D9On12                        m_d3d9On12;
     DxvkD3D8Bridge                  m_d3d8Bridge;

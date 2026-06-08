@@ -6,6 +6,7 @@
 #include "VkSubmitThreadCallback.h"
 #include "../dxvk/dxvk_device.h"
 #include "../util/rc/util_rc_ptr.h"
+#include "../util/com/com_pointer.h"
 #include "openvr/openvr.hpp"
 
 #include <mutex>
@@ -18,6 +19,8 @@ class D3D9Surface;
 class D3D9CommonTexture;
 class D3D9DeviceEx;
 }
+
+class ID3D9VRS;
 
 /**
 * OpenVR Direct Mode render class.
@@ -35,7 +38,7 @@ public:
 
 	void SetRenderTextureSize(uint32_t width, uint32_t height, int msaa);
 
-  void OnRenderTargetChanged(dxvk::Rc<dxvk::DxvkDevice> device, dxvk::D3D9Surface *rt);
+  void OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt);
 	void PrePresent(dxvk::D3D9DeviceEx *device);
 	void PostPresent();
 	void StartFrame();
@@ -49,8 +52,13 @@ public:
 	virtual void PrePresentCallBack();
 	virtual void PostPresentCallback();
 
+	void EnableFoveatedRendering(bool enabled);
+	void SetFoveationParams(float centerX, float centerY, float radius1, float radius2);
+
 private:
     void AwaitPreviousFrame();
+	void UpdateFoveationMode(bool shouldEnable);
+	void UpdateFoveationTexture();
 
   vr::IVRCompositor *m_pCompositor;
 
@@ -72,6 +80,18 @@ private:
 	std::mutex m_mutex;
 	std::condition_variable m_cv;
     dxvk::D3D9DeviceEx *m_lastUsedDevice = nullptr;
+
+	bool m_FoveatedRenderingEnabled = false;
+	bool m_FoveationNeedsUpdate = false;
+	float m_FoveationCenterX = 0.5f;
+	float m_FoveationCenterY = 0.5f;
+	float m_FoveationRadius1 = 0.2f;
+	float m_FoveationRadius2 = 0.4f;
+	dxvk::Com<IDirect3DTexture9> m_vrsImage;
+	UINT m_vrsImageWidth = 0;
+	UINT m_vrsImageHeight = 0;
+	dxvk::Com<IDirect3DDevice9> m_activeDevice = nullptr;
+	dxvk::Com<ID3D9VRS> m_vrsInterface = nullptr;
 };
 
 #endif //OPENVRDIRECTMODE_H_INCLUDED

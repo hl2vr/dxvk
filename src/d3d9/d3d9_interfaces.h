@@ -294,6 +294,20 @@ ID3D9VkExtInterface: public IUnknown {
   virtual void STDMETHODCALLTYPE UnlockAdditionalFormats() = 0;
 };
 
+#define D3DUSAGE_VRS  0x04000000
+
+MIDL_INTERFACE("a6b0f231-1be5-4f63-9e25-4c4d8e10b3cf")
+ID3D9VRS : public IUnknown {
+  virtual BOOL STDMETHODCALLTYPE IsAvailable() = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetShadingRateImage(
+          IDirect3DTexture9*    pTexture,
+          VkExtent2D            texelSize) = 0;
+  virtual HRESULT STDMETHODCALLTYPE Enable() = 0;
+  virtual HRESULT STDMETHODCALLTYPE Disable() = 0;
+  virtual VkExtent2D STDMETHODCALLTYPE GetMinTexelSize() = 0;
+  virtual VkExtent2D STDMETHODCALLTYPE GetMaxTexelSize() = 0;
+};
+
 #ifndef _MSC_VER
 __CRT_UUID_DECL(ID3D9VkInteropInterface,   0x3461a81b,0xce41,0x485b,0xb6,0xb5,0xfc,0xf0,0x8b,0xa6,0xa6,0xbd);
 __CRT_UUID_DECL(ID3D9VkInteropInterface1,  0xd6589ed4,0x7a37,0x4096,0xba,0xc2,0x22,0x3b,0x25,0xae,0x31,0xd2);
@@ -301,4 +315,5 @@ __CRT_UUID_DECL(ID3D9VkInteropTexture,     0xd56344f5,0x8d35,0x46fd,0x80,0x6d,0x
 __CRT_UUID_DECL(ID3D9VkInteropDevice,      0x2eaa4b89,0x0107,0x4bdb,0x87,0xf7,0x0f,0x54,0x1c,0x49,0x3c,0xe0);
 __CRT_UUID_DECL(ID3D9VkExtSwapchain,       0x13776e93,0x4aa9,0x430a,0xa4,0xec,0xfe,0x9e,0x28,0x11,0x81,0xd5);
 __CRT_UUID_DECL(ID3D9VkExtInterface,       0x65b55086,0xe3e3,0x4c3e,0xb3,0xa0,0x86,0x81,0x5c,0xce,0x2c,0x4c);
+__CRT_UUID_DECL(ID3D9VRS,                  0xa6b0f231,0x1be5,0x4f63,0x9e,0x25,0x4c,0x4d,0x8e,0x10,0xb3,0xcf);
 #endif

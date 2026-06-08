@@ -2861,6 +2861,23 @@ namespace dxvk {
   }
 
 
+  void DxvkContext::setFragmentShadingRate(
+    const Rc<DxvkImageView>&   imageView,
+          VkExtent2D           texelSize) {
+    m_state.om.shadingRateAttachment = imageView;
+    m_state.om.shadingRateTexelSize = texelSize;
+    m_flags.set(DxvkContextFlag::GpDirtyFragmentShadingRate);
+  }
+
+
+  void DxvkContext::setFragmentShadingRateEnabled(bool enabled) {
+    if (m_state.om.shadingRateEnabled != enabled) {
+      m_state.om.shadingRateEnabled = enabled;
+      m_flags.set(DxvkContextFlag::GpDirtyFragmentShadingRate);
+    }
+  }
+
+
   void DxvkContext::updatePageTable(
     const DxvkSparseBindInfo&   bindInfo,
           DxvkSparseBindFlags   flags) {
@@ -5895,6 +5912,25 @@ namespace dxvk {
       renderingInheritance.stencilAttachmentFormat = depthStencilFormat;
     }
 
+    if (m_state.om.shadingRateEnabled && m_state.om.shadingRateAttachment != nullptr) {
+      auto& fsrInfo = m_state.om.renderingInfo.shadingRateAttachment;
+      fsrInfo = { VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR };
+      fsrInfo.imageView = m_state.om.shadingRateAttachment->handle();
+      fsrInfo.imageLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+      fsrInfo.shadingRateAttachmentTexelSize = m_state.om.shadingRateTexelSize;
+
+      fsrInfo.pNext = std::exchange(renderingInfo.pNext, &fsrInfo);
+
+      addImageLayoutTransition(*m_state.om.shadingRateAttachment->image(),
+        m_state.om.shadingRateAttachment->imageSubresources(),
+        VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
+        VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR,
+        false);
+
+      flushImageLayoutTransitions(DxvkCmdBuffer::ExecBuffer);
+    }
+
     // Reset render area tracking, will be adjusted when drawing with viewports.
     m_state.om.renderAreaLo = VkOffset2D { int32_t(fbSize.width), int32_t(fbSize.height) };
     m_state.om.renderAreaHi = VkOffset2D { 0, 0 };
@@ -6193,6 +6229,7 @@ namespace dxvk {
                 DxvkContextFlag::GpDynamicMultisampleState,
                 DxvkContextFlag::GpDynamicRasterizerState,
                 DxvkContextFlag::GpDynamicSampleLocations,
+                DxvkContextFlag::GpDynamicFragmentShadingRate,
                 DxvkContextFlag::GpHasPushData,
                 DxvkContextFlag::GpIndependentSets);
     
@@ -6269,6 +6306,9 @@ namespace dxvk {
       m_flags.set(
         DxvkContextFlag::GpDirtyMultisampleState);
     }
+
+    if (m_device->features().khrFragmentShadingRate.pipelineFragmentShadingRate)
+      m_flags.set(DxvkContextFlag::GpDynamicFragmentShadingRate);
 
     // If necessary, dirty descriptor sets due to layout incompatibilities
     auto newPipelineLayoutType = getActivePipelineLayoutType(VK_PIPELINE_BIND_POINT_GRAPHICS);
@@ -7418,6 +7458,18 @@ namespace dxvk {
       if (m_state.dyn.depthBounds.minDepthBounds > 0.0f
        || m_state.dyn.depthBounds.maxDepthBounds < 1.0f)
         m_state.om.attachmentMask.trackDepthRead();
+    }
+
+    if (m_flags.all(DxvkContextFlag::GpDirtyFragmentShadingRate,
+                    DxvkContextFlag::GpDynamicFragmentShadingRate)) {
+      m_flags.clr(DxvkContextFlag::GpDirtyFragmentShadingRate);
+
+      VkExtent2D rate = m_state.om.shadingRateEnabled
+        ? m_state.dyn.fragmentShadingRate
+        : VkExtent2D{ 1, 1 };
+
+      auto combiners = m_state.dyn.fragmentShadingRateCombinerOps;
+      m_cmd->cmdSetFragmentShadingRate(rate, combiners);
     }
   }
 

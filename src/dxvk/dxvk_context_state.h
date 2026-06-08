@@ -59,6 +59,8 @@ namespace dxvk {
     GpDynamicRasterizerState,   ///< Cull mode and front face are dynamic
     GpDynamicSampleLocations,   ///< Sample locations are dynamic
     GpDynamicVertexStrides,     ///< Vertex buffer strides are dynamic
+    GpDirtyFragmentShadingRate, ///< Fragment shading rate attachment changed
+    GpDynamicFragmentShadingRate, ///< VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR is active
     GpHasPushData,              ///< Graphics pipeline uses push data
     GpIndependentSets,          ///< Graphics pipeline layout was created with independent sets
 
@@ -160,6 +162,9 @@ namespace dxvk {
     DxvkAttachmentMask  attachmentMask;
     VkOffset2D          renderAreaLo = { };
     VkOffset2D          renderAreaHi = { };
+    Rc<DxvkImageView>   shadingRateAttachment;
+    VkExtent2D          shadingRateTexelSize       = { };
+    bool                shadingRateEnabled         = false;
   };
 
 
@@ -208,6 +213,11 @@ namespace dxvk {
     uint32_t                    stencilReference        = 0;
     VkCullModeFlags             cullMode                = VK_CULL_MODE_BACK_BIT;
     VkFrontFace                 frontFace               = VK_FRONT_FACE_CLOCKWISE;
+    VkExtent2D                  fragmentShadingRate     = { 1, 1 };
+    VkFragmentShadingRateCombinerOpKHR fragmentShadingRateCombinerOps[2] = {
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
+      VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR,
+    };
   };
 
 
