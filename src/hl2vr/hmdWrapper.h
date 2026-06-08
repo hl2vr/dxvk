@@ -17,3 +17,7 @@ void DllExport dxvkSetRenderTextureSize(uint32_t width, uint32_t height, int msa
 // Called at the start of the frame to wait for OpenVR readiness (WaitGetPoses)
 // must be done within DXVK since WaitGetPoses must be called from the render thread
 void  DllExport dxvkStartFrame();
+
+void DllExport dxvkEnableFoveatedRendering(bool enabled);
+
+void DllExport dxvkSetFoveationParams(float centerX, float centerY, float radius1, float radius2);

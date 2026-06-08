@@ -39,6 +39,7 @@ namespace dxvk {
     VkPhysicalDeviceMaintenance5PropertiesKHR                 khrMaintenance5                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES_KHR };
     VkPhysicalDeviceMaintenance6PropertiesKHR                 khrMaintenance6                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES_KHR };
     VkPhysicalDeviceMaintenance7PropertiesKHR                 khrMaintenance7                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR };
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR          khrFragmentShadingRate          = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR };
   };
 
 
@@ -89,6 +90,7 @@ namespace dxvk {
     VkPhysicalDevicePresentWaitFeaturesKHR                    khrPresentWait                  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR };
     VkBool32                                                  khrSwapchain                    = VK_FALSE;
     VkBool32                                                  khrSwapchainMutableFormat       = VK_FALSE;
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR            khrFragmentShadingRate          = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR };
     VkBool32                                                  khrWin32KeyedMutex              = VK_FALSE;
     VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV    nvDescriptorPoolOverallocation  = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV };
     VkBool32                                                  nvLowLatency2                   = VK_FALSE;
@@ -146,6 +148,7 @@ namespace dxvk {
     VkExtensionProperties khrPresentWait                    = vk::makeExtension(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
     VkExtensionProperties khrSwapchain                      = vk::makeExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     VkExtensionProperties khrSwapchainMutableFormat         = vk::makeExtension(VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME);
+    VkExtensionProperties khrFragmentShadingRate            = vk::makeExtension(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
     VkExtensionProperties khrWin32KeyedMutex                = vk::makeExtension(VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME);
     VkExtensionProperties nvDescriptorPoolOverallocation    = vk::makeExtension(VK_NV_DESCRIPTOR_POOL_OVERALLOCATION_EXTENSION_NAME);
     VkExtensionProperties nvLowLatency2                     = vk::makeExtension(VK_NV_LOW_LATENCY_2_EXTENSION_NAME);

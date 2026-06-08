@@ -1235,6 +1235,13 @@ namespace dxvk {
     void setBarrierControl(
             DxvkBarrierControlFlags control);
 
+    void setFragmentShadingRate(
+      const Rc<DxvkImageView>&   imageView,
+            VkExtent2D           texelSize);
+
+    void setFragmentShadingRateEnabled(
+            bool                 enabled);
+
     /**
      * \brief Updates page table for a given sparse resource
      *

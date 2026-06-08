@@ -1293,7 +1293,7 @@ namespace dxvk {
 
     // Create image views, etc.
     DxvkMetaMipGenViews mipGenerator(imageView);
-    
+
     VkImageLayout dstLayout = mipGenerator.getDstView(0u)->getLayout();
     VkImageLayout srcLayout = mipGenerator.getSrcView(0u)->getLayout();
 
@@ -1309,7 +1309,7 @@ namespace dxvk {
       VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, true);
 
     flushImageLayoutTransitions(DxvkCmdBuffer::ExecBuffer);
-    
+
     // Common descriptor set properties that we use to
     // bind the source image view to the fragment shader
     Rc<DxvkSampler> sampler = createBlitSampler(filter);
@@ -1326,7 +1326,7 @@ namespace dxvk {
     VkRenderingInfo renderingInfo = { VK_STRUCTURE_TYPE_RENDERING_INFO };
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachments = &attachmentInfo;
-    
+
     // Retrieve a compatible pipeline to use for rendering
     auto resolveMode = filter == VK_FILTER_NEAREST
       ? DxvkMetaBlitResolveMode::FilterNearest
@@ -2023,7 +2023,7 @@ namespace dxvk {
         srcLayout, dstImage->info().stages, dstImage->info().access,
         dstLayout, dstImage->info().stages, dstImage->info().access,
         DxvkAccessOp::None);
-      
+
       m_cmd->track(dstImage, DxvkAccess::Write);
     }
   }
@@ -2055,7 +2055,7 @@ namespace dxvk {
       depthOp.loadOpD = VK_ATTACHMENT_LOAD_OP_CLEAR;
     else if (discardAspects & VK_IMAGE_ASPECT_DEPTH_BIT)
       depthOp.loadOpD = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    
+
     if (clearAspects & VK_IMAGE_ASPECT_STENCIL_BIT)
       depthOp.loadOpS = VK_ATTACHMENT_LOAD_OP_CLEAR;
     else if (discardAspects & VK_IMAGE_ASPECT_STENCIL_BIT)
@@ -2092,7 +2092,7 @@ namespace dxvk {
       colorOp.loadLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
       depthOp.loadLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
     }
-    
+
     if (attachmentIndex < 0) {
       bool useLateClear = m_device->perfHints().renderPassClearFormatBug
         && imageView->info().format != imageView->image()->info().format;
@@ -2127,7 +2127,7 @@ namespace dxvk {
 
       VkPipelineStageFlags clearStages = 0;
       VkAccessFlags        clearAccess = 0;
-      
+
       if ((clearAspects | discardAspects) & VK_IMAGE_ASPECT_COLOR_BIT) {
         clearStages |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         clearAccess |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -2203,12 +2203,12 @@ namespace dxvk {
 
         m_state.om.renderPassOps.colorOps[colorIndex].clearValue = clearValue.color;
       }
-      
+
       if ((clearAspects | discardAspects) & VK_IMAGE_ASPECT_DEPTH_BIT) {
         m_state.om.renderPassOps.depthOps.loadOpD = depthOp.loadOpD;
         m_state.om.renderPassOps.depthOps.clearValue.depth = clearValue.depthStencil.depth;
       }
-      
+
       if ((clearAspects | discardAspects) & VK_IMAGE_ASPECT_STENCIL_BIT) {
         m_state.om.renderPassOps.depthOps.loadOpS = depthOp.loadOpS;
         m_state.om.renderPassOps.depthOps.clearValue.stencil = clearValue.depthStencil.stencil;
@@ -2981,6 +2981,23 @@ namespace dxvk {
   }
 
 
+  void DxvkContext::setFragmentShadingRate(
+    const Rc<DxvkImageView>&   imageView,
+          VkExtent2D           texelSize) {
+    m_state.om.shadingRateAttachment = imageView;
+    m_state.om.shadingRateTexelSize = texelSize;
+    m_flags.set(DxvkContextFlag::GpDirtyFragmentShadingRate);
+  }
+
+
+  void DxvkContext::setFragmentShadingRateEnabled(bool enabled) {
+    if (m_state.om.shadingRateEnabled != enabled) {
+      m_state.om.shadingRateEnabled = enabled;
+      m_flags.set(DxvkContextFlag::GpDirtyFragmentShadingRate);
+    }
+  }
+
+
   void DxvkContext::updatePageTable(
     const DxvkSparseBindInfo&   bindInfo,
           DxvkSparseBindFlags   flags) {
@@ -3453,7 +3470,7 @@ namespace dxvk {
       *dstView->image(), dstView->imageSubresources(), dstLayout,
       VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
       VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, DxvkAccessOp::None);
-    
+
     accessImage(DxvkCmdBuffer::ExecBuffer,
       *srcView->image(), srcView->imageSubresources(), srcLayout,
       VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
@@ -4127,7 +4144,7 @@ namespace dxvk {
     // Find out if the render target view is currently bound,
     // so that we can avoid spilling the render pass if it is.
     int32_t attachmentIndex = -1;
-    
+
     if (m_state.om.framebufferInfo.isFullSize(imageView))
       attachmentIndex = m_state.om.framebufferInfo.findAttachment(imageView);
 
@@ -4862,7 +4879,7 @@ namespace dxvk {
     resolveInfo.pRegions = &resolveRegion;
 
     m_cmd->cmdResolveImage(&resolveInfo);
-  
+
     accessImage(DxvkCmdBuffer::ExecBuffer,
       *dstImage, dstSubresourceRange, dstLayout,
       VK_PIPELINE_STAGE_2_TRANSFER_BIT,
@@ -5779,6 +5796,25 @@ namespace dxvk {
       renderingInheritance.stencilAttachmentFormat = depthStencilFormat;
     }
 
+    if (m_state.om.shadingRateEnabled && m_state.om.shadingRateAttachment != nullptr) {
+      auto& fsrInfo = m_state.om.renderingInfo.shadingRateAttachment;
+      fsrInfo = { VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR };
+      fsrInfo.imageView = m_state.om.shadingRateAttachment->handle();
+      fsrInfo.imageLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+      fsrInfo.shadingRateAttachmentTexelSize = m_state.om.shadingRateTexelSize;
+
+      fsrInfo.pNext = std::exchange(renderingInfo.pNext, &fsrInfo);
+
+      addImageLayoutTransition(*m_state.om.shadingRateAttachment->image(),
+        m_state.om.shadingRateAttachment->imageSubresources(),
+        VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR,
+        VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR,
+        false);
+
+      flushImageLayoutTransitions(DxvkCmdBuffer::ExecBuffer);
+    }
+
     // On drivers that don't natively support secondary command buffers, only use
     // them to enable MSAA resolve attachments. Also ignore render passes with only
     // one color attachment here since those tend to only have a small number of
@@ -6083,6 +6119,7 @@ namespace dxvk {
                 DxvkContextFlag::GpDynamicStencilTest,
                 DxvkContextFlag::GpDynamicMultisampleState,
                 DxvkContextFlag::GpDynamicRasterizerState,
+                DxvkContextFlag::GpDynamicFragmentShadingRate,
                 DxvkContextFlag::GpHasPushData,
                 DxvkContextFlag::GpIndependentSets);
     
@@ -6150,6 +6187,9 @@ namespace dxvk {
       m_flags.set(
         DxvkContextFlag::GpDirtyMultisampleState);
     }
+
+    if (m_device->features().khrFragmentShadingRate.pipelineFragmentShadingRate)
+      m_flags.set(DxvkContextFlag::GpDynamicFragmentShadingRate);
 
     // If necessary, dirty descriptor sets due to layout incompatibilities
     auto newPipelineLayoutType = getActivePipelineLayoutType(VK_PIPELINE_BIND_POINT_GRAPHICS);
@@ -6913,8 +6953,8 @@ namespace dxvk {
 
     m_rtLayouts = layouts;
   }
-  
-  
+
+
   void DxvkContext::prepareImage(
     const Rc<DxvkImage>&          image,
     const VkImageSubresourceRange& subresources,
@@ -7319,6 +7359,18 @@ namespace dxvk {
        || m_state.dyn.depthBounds.maxDepthBounds < 1.0f)
         m_state.om.attachmentMask.trackDepthRead();
     }
+
+    if (m_flags.all(DxvkContextFlag::GpDirtyFragmentShadingRate,
+                    DxvkContextFlag::GpDynamicFragmentShadingRate)) {
+      m_flags.clr(DxvkContextFlag::GpDirtyFragmentShadingRate);
+
+      VkExtent2D rate = m_state.om.shadingRateEnabled
+        ? m_state.dyn.fragmentShadingRate
+        : VkExtent2D{ 1, 1 };
+
+      auto combiners = m_state.dyn.fragmentShadingRateCombinerOps;
+      m_cmd->cmdSetFragmentShadingRate(rate, combiners);
+    }
   }
 
 
@@ -7400,7 +7452,7 @@ namespace dxvk {
         &data[pushData.getOffset()]);
     }
   }
-  
+
 
   template<bool Resolve>
   bool DxvkContext::commitComputeState() {

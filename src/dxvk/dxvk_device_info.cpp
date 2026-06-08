@@ -49,6 +49,7 @@ namespace dxvk {
     HANDLE_EXT(khrPipelineLibrary);                \
     HANDLE_EXT(khrPresentId);                      \
     HANDLE_EXT(khrPresentWait);                    \
+    HANDLE_EXT(khrFragmentShadingRate);            \
     HANDLE_EXT(khrSwapchain);                      \
     HANDLE_EXT(khrSwapchainMutableFormat);         \
     HANDLE_EXT(khrWin32KeyedMutex);                \
@@ -71,7 +72,8 @@ namespace dxvk {
     HANDLE_EXT(extVertexAttributeDivisor);         \
     HANDLE_EXT(khrMaintenance5);                   \
     HANDLE_EXT(khrMaintenance6);                   \
-    HANDLE_EXT(khrMaintenance7);
+    HANDLE_EXT(khrMaintenance7);                   \
+    HANDLE_EXT(khrFragmentShadingRate);
 
 
   DxvkDeviceCapabilities::DxvkDeviceCapabilities(
@@ -886,6 +888,11 @@ namespace dxvk {
 
       /* Mutable format used to change srgb-ness of swapchain views */
       ENABLE_EXT(khrSwapchainMutableFormat, false),
+
+      /* Variable rate shading */
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, pipelineFragmentShadingRate, false),
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, primitiveFragmentShadingRate, false),
+      ENABLE_EXT_FEATURE(khrFragmentShadingRate, attachmentFragmentShadingRate, false),
 
       /* Keyed mutex support in wine */
       ENABLE_EXT(khrWin32KeyedMutex, false),

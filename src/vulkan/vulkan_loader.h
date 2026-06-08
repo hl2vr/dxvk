@@ -467,6 +467,10 @@ namespace dxvk::vk {
     VULKAN_FN(vkGetImageSubresourceLayout2KHR);
     #endif
 
+    #ifdef VK_KHR_fragment_shading_rate
+    VULKAN_FN(vkCmdSetFragmentShadingRateKHR);
+    #endif
+
     #ifdef VK_KHR_maintenance6
     VULKAN_FN(vkCmdBindDescriptorSets2KHR);
     VULKAN_FN(vkCmdPushConstants2KHR);

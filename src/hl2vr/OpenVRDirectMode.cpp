@@ -2,6 +2,7 @@
 #include "OpenVRDirectMode.h"
 
 #include "../d3d9/d3d9_device.h"
+#include "../d3d9/d3d9_interfaces.h"
 
 OpenVRDirectMode::OpenVRDirectMode() : 
 	m_pCompositor(nullptr),
@@ -40,27 +41,34 @@ void OpenVRDirectMode::SetRenderTextureSize(uint32_t width, uint32_t height, int
   m_multiSamples = std::max(1, std::min(16, msaa));
   if (m_multiSamples == 1)
     m_multiSamples = 0;
+
+  m_FoveationNeedsUpdate = true;
 }
 
-void OpenVRDirectMode::OnRenderTargetChanged(dxvk::Rc<dxvk::DxvkDevice> device, dxvk::D3D9Surface *rt) {
+void OpenVRDirectMode::OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt) {
+  // note: the device is locked as we are inside a device call, so we cannot use its public API here!
+
   D3DSURFACE_DESC desc;
   rt->GetDesc(&desc);
 
   if (desc.Width == m_nRenderWidth && desc.Height >= m_nRenderHeight) {
     m_d3d9Tex = rt->GetCommonTexture();
+    m_activeDevice = nullptr;
+    rt->GetDevice(&m_activeDevice);
     m_VulkanData.m_nHeight = desc.Height;
     m_VulkanData.m_nWidth = desc.Width;
     // VkPhysicalDevice
-    m_VulkanData.m_pPhysicalDevice = device->adapter()->handle();
+    auto dxvkDevice = device->GetDXVKDevice();
+    m_VulkanData.m_pPhysicalDevice = dxvkDevice->adapter()->handle();
     // VkDevice
-    m_VulkanData.m_pDevice = device->handle();
+    m_VulkanData.m_pDevice = dxvkDevice->handle();
     // VkImage
     m_VulkanData.m_nImage = (uint64_t)rt->GetCommonTexture()->GetImage()->handle();
     // VkInstance
-    m_VulkanData.m_pInstance = device->instance()->vki()->instance();
+    m_VulkanData.m_pInstance = dxvkDevice->instance()->vki()->instance();
     // VkQueue
-    m_VulkanData.m_pQueue = device->queues().graphics.queueHandle;
-    m_VulkanData.m_nQueueFamilyIndex = device->queues().graphics.queueFamily;
+    m_VulkanData.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
+    m_VulkanData.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
     m_VulkanData.m_nFormat = VK_FORMAT_B8G8R8A8_UNORM;
     m_VulkanData.m_nSampleCount = m_multiSamples;
 
@@ -77,6 +85,8 @@ void OpenVRDirectMode::OnRenderTargetChanged(dxvk::Rc<dxvk::DxvkDevice> device, 
 
     m_textureSet = true;
   }
+
+  UpdateFoveationMode(m_d3d9Tex == rt->GetCommonTexture());
 }
 
 void OpenVRDirectMode::PrePresent(dxvk::D3D9DeviceEx *device)
@@ -191,6 +201,8 @@ void OpenVRDirectMode::StartFrame()
   std::lock_guard<std::mutex> lk(m_mutex);
   m_frameRunning = true;
   m_timingInfoSubmitted = false;
+
+  UpdateFoveationTexture();
 }
 
 int OpenVRDirectMode::DetermineMSAA(uint32_t width, uint32_t height) {
@@ -198,4 +210,105 @@ int OpenVRDirectMode::DetermineMSAA(uint32_t width, uint32_t height) {
     return m_multiSamples;
   }
   return 0;
+}
+
+void OpenVRDirectMode::EnableFoveatedRendering(bool enabled) {
+  m_FoveatedRenderingEnabled = enabled;
+  m_FoveationNeedsUpdate = true;
+}
+
+void OpenVRDirectMode::SetFoveationParams(float centerX, float centerY, float radius1, float radius2) {
+  m_FoveationCenterX = centerX;
+  m_FoveationCenterY = centerY;
+  m_FoveationRadius1 = radius1;
+  m_FoveationRadius2 = radius2;
+	m_FoveationNeedsUpdate = true;
+}
+
+void OpenVRDirectMode::UpdateFoveationMode(bool shouldEnable)
+{
+  if (!m_FoveatedRenderingEnabled || !m_vrsInterface)
+    return;
+
+  if (shouldEnable)
+    m_vrsInterface->Enable();
+  else
+    m_vrsInterface->Disable();
+}
+
+void OpenVRDirectMode::UpdateFoveationTexture()
+{
+  if (!m_activeDevice)
+    return;
+
+  m_vrsInterface = nullptr;
+  m_activeDevice->QueryInterface(__uuidof(ID3D9VRS), reinterpret_cast<void**>(&m_vrsInterface));
+  if (!m_vrsInterface)
+    return;
+
+  if (m_FoveationNeedsUpdate)
+  {
+    m_FoveationNeedsUpdate = false;
+    if (m_FoveatedRenderingEnabled)
+    {
+      VkExtent2D minTexelSize = m_vrsInterface->GetMinTexelSize();
+      VkExtent2D maxTexelSize = m_vrsInterface->GetMaxTexelSize();
+      VkExtent2D desiredTexelSize;
+      desiredTexelSize.width = dxvk::clamp(32u, minTexelSize.width, maxTexelSize.height);
+      desiredTexelSize.height = dxvk::clamp(32u, minTexelSize.height, maxTexelSize.height);
+
+      UINT desiredVrsImageWidth = (m_VulkanData.m_nWidth + desiredTexelSize.width - 1) / desiredTexelSize.width;
+      UINT desiredVrsImageHeight = (m_VulkanData.m_nHeight + desiredTexelSize.height - 1) / desiredTexelSize.height;
+
+      if (!m_vrsImage || desiredVrsImageWidth != m_vrsImageWidth || desiredVrsImageHeight != m_vrsImageHeight)
+      {
+        m_vrsImageWidth = desiredVrsImageWidth;
+        m_vrsImageHeight = desiredVrsImageHeight;
+        m_vrsImage = nullptr;
+        dxvk::Logger::info("Creating VRS image with dimensions: " + std::to_string(m_vrsImageWidth) + "x" + std::to_string(m_vrsImageHeight));
+        HRESULT result = m_activeDevice->CreateTexture(m_vrsImageWidth, m_vrsImageHeight, 1, D3DUSAGE_DYNAMIC | D3DUSAGE_VRS, D3DFMT_A8, D3DPOOL_DEFAULT, &m_vrsImage, nullptr);
+        if (FAILED(result))
+        {
+          dxvk::Logger::warn("VRS image creation failed: " + std::to_string(result));
+        }
+      }
+
+      if (!m_vrsImage)
+        return;
+
+      D3DLOCKED_RECT lockedRect;
+      if (m_vrsImage->LockRect(0, &lockedRect, nullptr, D3DLOCK_DISCARD) == D3D_OK)
+      {
+        BYTE* data = (BYTE*)lockedRect.pBits;
+        UINT halfWidth = m_vrsImageWidth / 2;
+        UINT centerX1 = halfWidth * m_FoveationCenterX;
+        UINT centerX2 = centerX1 + halfWidth;
+        UINT centerY = m_vrsImageHeight * m_FoveationCenterY;
+        UINT radius1 = m_vrsImageHeight * 0.5f * m_FoveationRadius1;
+        UINT radius2 = m_vrsImageHeight * 0.5f * m_FoveationRadius2;
+        for (UINT y = 0; y < m_vrsImageHeight; ++y)
+        {
+          for (UINT x = 0; x < m_vrsImageWidth; ++x)
+          {
+            UINT distSqr1 = (x - centerX1) * (x - centerX1) + (y - centerY) * (y - centerY);
+            UINT distSqr2 = (x - centerX2) * (x - centerX2) + (y - centerY) * (y - centerY);
+            UINT distSqr = std::min(distSqr1, distSqr2);
+            if (distSqr >= radius2 * radius2)
+              data[y * lockedRect.Pitch + x] = 0x0A;
+            else if (distSqr >= radius1 * radius1)
+              data[y * lockedRect.Pitch + x] = 0x05;
+            else
+              data[y * lockedRect.Pitch + x] = 0;
+          }
+        }
+        m_vrsImage->UnlockRect(0);
+      }
+
+      m_vrsInterface->SetShadingRateImage(m_vrsImage.ptr(), desiredTexelSize);
+    }
+    else
+    {
+      m_vrsInterface->Disable();
+    }
+  }
 }

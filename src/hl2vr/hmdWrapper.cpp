@@ -23,5 +23,15 @@ void DllExport dxvkSetRenderTextureSize(uint32_t width, uint32_t height, int msa
 
 void DllExport dxvkStartFrame()
 {
-	g_OpenVR.StartFrame();
+  g_OpenVR.StartFrame();
+}
+
+void DllExport dxvkEnableFoveatedRendering(bool enabled)
+{
+	g_OpenVR.EnableFoveatedRendering(enabled);
+}
+
+void DllExport dxvkSetFoveationParams(float centerX, float centerY, float radius1, float radius2)
+{
+  g_OpenVR.SetFoveationParams(centerX, centerY, radius1, radius2);
 }

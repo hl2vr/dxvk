@@ -67,6 +67,7 @@ namespace dxvk {
     , m_submissionFence    ( new sync::Fence() )
     , m_flushTracker       ( GetMaxFlushType() )
     , m_d3d9Interop        ( this )
+    , m_d3d9VRS            ( this )
     , m_d3d9On12Args       ( pAdapter->Get9On12Args() )
     , m_d3d9On12           ( this )
     , m_d3d8Bridge         ( this ) {
@@ -244,6 +245,11 @@ namespace dxvk {
 
     if (riid == __uuidof(ID3D9VkInteropDevice)) {
       *ppvObject = ref(&m_d3d9Interop);
+      return S_OK;
+    }
+
+    if (riid == __uuidof(ID3D9VRS)) {
+      *ppvObject = ref(&m_d3d9VRS);
       return S_OK;
     }
 
@@ -1756,7 +1762,7 @@ namespace dxvk {
     }
 
     if (rt != nullptr) {
-      OpenVRDirectMode::Get()->OnRenderTargetChanged(GetDXVKDevice(), rt);
+      OpenVRDirectMode::Get()->OnRenderTargetChanged(this, rt);
     }
 
     return D3D_OK;
