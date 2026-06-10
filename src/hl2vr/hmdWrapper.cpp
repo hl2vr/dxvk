@@ -31,7 +31,7 @@ void DllExport dxvkEnableFoveatedRendering(bool enabled)
 	g_OpenVR.EnableFoveatedRendering(enabled);
 }
 
-void DllExport dxvkSetFoveationParams(float centerX, float centerY, float radius1, float radius2)
+void DllExport dxvkSetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3)
 {
-  g_OpenVR.SetFoveationParams(centerX, centerY, radius1, radius2);
+  g_OpenVR.SetFoveationParams(centerLX, centerLY, centerRX, centerRY, radius1, radius2, radius3);
 }

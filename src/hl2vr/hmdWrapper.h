@@ -20,4 +20,4 @@ void  DllExport dxvkStartFrame();
 
 void DllExport dxvkEnableFoveatedRendering(bool enabled);
 
-void DllExport dxvkSetFoveationParams(float centerX, float centerY, float radius1, float radius2);
+void DllExport dxvkSetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3);
