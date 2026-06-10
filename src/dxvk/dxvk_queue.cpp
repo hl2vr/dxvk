@@ -159,6 +159,11 @@ namespace dxvk {
         if (m_callback)
           m_callback(true);
 
+        if (g_pVkSubmitThreadCallback != nullptr)
+        {
+			g_pVkSubmitThreadCallback->PreSubmitCallback();
+        }
+
         if (entry.submit.cmdList != nullptr) {
 
 			if (entry.latency.tracker) {
