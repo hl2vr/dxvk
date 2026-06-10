@@ -58,8 +58,8 @@ namespace dxvk {
 #ifdef _WIN32
         HMODULE ntdll = GetModuleHandleA("ntdll.dll");
 
-        if (ntdll)
-          m_wineLogOutput = reinterpret_cast<PFN_wineLogOutput>(GetProcAddress(ntdll, "__wine_dbg_output"));
+        //if (ntdll)
+        //  m_wineLogOutput = reinterpret_cast<PFN_wineLogOutput>(GetProcAddress(ntdll, "__wine_dbg_output"));
 #endif
         auto path = getFileName(m_fileName);
 

@@ -6,7 +6,7 @@
 #define DllImport __declspec(dllimport)
 
 // Initialize our OpenVR handling in dxvk by passing the Compositor interface
-void DllExport dxvkInitOpenVR(vr::IVRCompositor *compositor);
+void DllExport dxvkInitOpenVR(vr::IVRSystem* system, vr::IVRCompositor *compositor);
 // Shut down OpenVR handling in dxvk
 void DllExport dxvkShutdownOpenVR();
 
@@ -21,3 +21,5 @@ void  DllExport dxvkStartFrame();
 void DllExport dxvkEnableFoveatedRendering(bool enabled);
 
 void DllExport dxvkSetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3);
+
+void DllExport dxvkSetZRange(float zNearL, float zFarL, float zNearR, float zFarR);

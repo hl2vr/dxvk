@@ -33,12 +33,12 @@ public:
 
 	static OpenVRDirectMode *Get();
 
-	void Init(vr::IVRCompositor *compositor);	
+	void Init(vr::IVRSystem* system, vr::IVRCompositor *compositor);	
 	void Shutdown();
 
 	void SetRenderTextureSize(uint32_t width, uint32_t height, int msaa);
 
-  void OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt);
+  void OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt, bool isDepth = false);
 	void PrePresent(dxvk::D3D9DeviceEx *device);
 	void PostPresent();
 	void StartFrame();
@@ -55,11 +55,14 @@ public:
 	void EnableFoveatedRendering(bool enabled);
 	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3);
 
+	void SetZRange(float zNearL, float zFarL, float zNearR, float zFarR);
+
 private:
     void AwaitPreviousFrame();
 	void UpdateFoveationMode(bool shouldEnable);
 	void UpdateFoveationTexture();
 
+	vr::IVRSystem *m_pSystem;
   vr::IVRCompositor *m_pCompositor;
 
 	uint32_t m_nRenderWidth;
@@ -69,8 +72,10 @@ private:
 	bool m_initialised;
 
   vr::VRVulkanTextureData_t m_VulkanData;
-  vr::Texture_t m_VRTexture;
+  vr::VRVulkanTextureData_t m_VulkanDataDepth;
+  vr::VRTextureWithPoseAndDepth_t m_VRTexture;
   dxvk::D3D9CommonTexture *m_d3d9Tex = nullptr;
+  dxvk::D3D9CommonTexture *m_d3d9DepthTex = nullptr;
 
 	std::atomic<bool>   m_textureSet = { false };
 	std::atomic<bool>   m_submitCalled = { false };
@@ -95,6 +100,9 @@ private:
 	UINT m_vrsImageHeight = 0;
 	dxvk::Com<IDirect3DDevice9> m_activeDevice = nullptr;
 	dxvk::Com<ID3D9VRS> m_vrsInterface = nullptr;
+
+	float m_zNearL, m_zFarL;
+	float m_zNearR, m_zFarR;
 };
 
 #endif //OPENVRDIRECTMODE_H_INCLUDED
