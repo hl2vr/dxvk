@@ -53,7 +53,7 @@ public:
 	virtual void PostPresentCallback();
 
 	void EnableFoveatedRendering(bool enabled);
-	void SetFoveationParams(float centerX, float centerY, float radius1, float radius2);
+	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3);
 
 private:
     void AwaitPreviousFrame();
@@ -83,10 +83,13 @@ private:
 
 	bool m_FoveatedRenderingEnabled = false;
 	bool m_FoveationNeedsUpdate = false;
-	float m_FoveationCenterX = 0.5f;
-	float m_FoveationCenterY = 0.5f;
+	float m_FoveationCenterLX = 0.5f;
+	float m_FoveationCenterLY = 0.5f;
+	float m_FoveationCenterRX = 0.5f;
+	float m_FoveationCenterRY = 0.5f;
 	float m_FoveationRadius1 = 0.2f;
 	float m_FoveationRadius2 = 0.4f;
+	float m_FoveationRadius3 = 0.6f;
 	dxvk::Com<IDirect3DTexture9> m_vrsImage;
 	UINT m_vrsImageWidth = 0;
 	UINT m_vrsImageHeight = 0;
