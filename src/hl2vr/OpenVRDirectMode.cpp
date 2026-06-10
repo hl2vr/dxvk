@@ -15,14 +15,16 @@ OpenVRDirectMode::~OpenVRDirectMode()
 }
 
 
-void OpenVRDirectMode::Init(vr::IVRCompositor *compositor)
+void OpenVRDirectMode::Init(vr::IVRSystem *system, vr::IVRCompositor *compositor)
 {
   if (m_initialised)
     Shutdown();
 
   memset(&m_VulkanData, 0, sizeof(m_VulkanData));
+  memset(&m_VulkanDataDepth, 0, sizeof(m_VulkanDataDepth));
   memset(&m_VRTexture, 0, sizeof(m_VRTexture));
   m_lastUsedDevice = nullptr;
+  m_pSystem = system;
   m_pCompositor = compositor;
   m_pCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
   m_initialised = true;
@@ -45,48 +47,60 @@ void OpenVRDirectMode::SetRenderTextureSize(uint32_t width, uint32_t height, int
   m_FoveationNeedsUpdate = true;
 }
 
-void OpenVRDirectMode::OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt) {
+void OpenVRDirectMode::OnRenderTargetChanged(dxvk::D3D9DeviceEx* device, dxvk::D3D9Surface *rt, bool isDepth) {
   // note: the device is locked as we are inside a device call, so we cannot use its public API here!
 
   D3DSURFACE_DESC desc;
   rt->GetDesc(&desc);
 
   if (desc.Width == m_nRenderWidth && desc.Height >= m_nRenderHeight) {
-    m_d3d9Tex = rt->GetCommonTexture();
+	  if (isDepth)
+		  m_d3d9DepthTex = rt->GetCommonTexture();
+	  else
+		  m_d3d9Tex = rt->GetCommonTexture();
     m_activeDevice = nullptr;
     rt->GetDevice(&m_activeDevice);
-    m_VulkanData.m_nHeight = desc.Height;
-    m_VulkanData.m_nWidth = desc.Width;
+	vr::VRVulkanTextureData_t &vulkanData = isDepth ? m_VulkanDataDepth : m_VulkanData;
+    vulkanData.m_nHeight = desc.Height;
+    vulkanData.m_nWidth = desc.Width;
     // VkPhysicalDevice
     auto dxvkDevice = device->GetDXVKDevice();
-    m_VulkanData.m_pPhysicalDevice = dxvkDevice->adapter()->handle();
+    vulkanData.m_pPhysicalDevice = dxvkDevice->adapter()->handle();
     // VkDevice
-    m_VulkanData.m_pDevice = dxvkDevice->handle();
+    vulkanData.m_pDevice = dxvkDevice->handle();
     // VkImage
-    m_VulkanData.m_nImage = (uint64_t)rt->GetCommonTexture()->GetImage()->handle();
+    vulkanData.m_nImage = (uint64_t)rt->GetCommonTexture()->GetImage()->handle();
     // VkInstance
-    m_VulkanData.m_pInstance = dxvkDevice->instance()->vki()->instance();
+    vulkanData.m_pInstance = dxvkDevice->instance()->vki()->instance();
     // VkQueue
-    m_VulkanData.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
-    m_VulkanData.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
-    m_VulkanData.m_nFormat = VK_FORMAT_B8G8R8A8_UNORM;
-    m_VulkanData.m_nSampleCount = m_multiSamples;
+    vulkanData.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
+    vulkanData.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
+    vulkanData.m_nFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    vulkanData.m_nSampleCount = m_multiSamples;
 
     if (m_multiSamples > 1) {
       // submitting multi-sampled textures to OpenVR seems to cause driver crashes with AMD under certain circumstances
       // so submit the resolved texture, instead. it should be resolved at the point it's submitted.
-      m_VulkanData.m_nImage = (uint64_t)rt->GetCommonTexture()->GetResolveImage()->handle();
-      m_VulkanData.m_nSampleCount = 1;
+      vulkanData.m_nImage = (uint64_t)rt->GetCommonTexture()->GetResolveImage()->handle();
+      vulkanData.m_nSampleCount = 1;
     }
 
-    m_VRTexture.eType = vr::TextureType_Vulkan;
-    m_VRTexture.eColorSpace = vr::ColorSpace_Auto;
-    m_VRTexture.handle = &m_VulkanData;
+    if (isDepth)
+    {
+		m_VRTexture.depth.handle = &m_VulkanDataDepth;
+    }
+	else
+	{
+		m_VRTexture.eType = vr::TextureType_Vulkan;
+		m_VRTexture.eColorSpace = vr::ColorSpace_Auto;
+		m_VRTexture.handle = &m_VulkanData;
 
-    m_textureSet = true;
+		m_textureSet = true;
+	}
   }
 
-  UpdateFoveationMode(m_d3d9Tex == rt->GetCommonTexture());
+  if (!isDepth)
+	  UpdateFoveationMode(m_d3d9Tex == rt->GetCommonTexture());
 }
 
 void OpenVRDirectMode::PrePresent(dxvk::D3D9DeviceEx *device)
@@ -109,11 +123,23 @@ void OpenVRDirectMode::PrePresent(dxvk::D3D9DeviceEx *device)
       m_d3d9Tex->GetImage()->info().layout,
       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
   }
+  if (m_d3d9DepthTex != nullptr && m_textureSet) {
+    // transition our render texture to proper image layout before submitting to OpenVR
+    VkImageSubresourceRange subresources = {
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        0, m_d3d9DepthTex->GetImage()->info().mipLevels,
+        0, m_d3d9DepthTex->GetImage()->info().numLayers
+      };
+    device->TransformImage(m_d3d9DepthTex, &subresources,
+      m_d3d9DepthTex->GetImage()->info().layout,
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  }
 }
 
 void OpenVRDirectMode::PostPresent()
 {
   m_d3d9Tex = nullptr;
+	m_d3d9DepthTex = nullptr;
 }
 
 void OpenVRDirectMode::PreSubmitCallback() {
@@ -136,11 +162,18 @@ void OpenVRDirectMode::PrePresentCallBack()
     static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
     if (m_pCompositor && m_pCompositor->CanRenderScene()) {
+		int flags = vr::Submit_TextureWithPose;
+		if (m_d3d9DepthTex != nullptr)
+			flags |= vr::Submit_TextureWithDepth;
+		m_VRTexture.depth.mProjection = m_pSystem->GetProjectionMatrix(vr::Eye_Left, m_zNearL, m_zFarL);
+		m_VRTexture.depth.vRange.v[0] = 0;
+		m_VRTexture.depth.vRange.v[1] = 1;
       vr::EVRCompositorError error =
-          m_pCompositor->Submit(vr::Eye_Left, &m_VRTexture, &leftBounds);
+          m_pCompositor->Submit(vr::Eye_Left, &m_VRTexture, &leftBounds, (vr::EVRSubmitFlags)flags);
       if (error != vr::VRCompositorError_None) {}
 
-      error = m_pCompositor->Submit(vr::Eye_Right, &m_VRTexture, &rightBounds);
+		m_VRTexture.depth.mProjection = m_pSystem->GetProjectionMatrix(vr::Eye_Right, m_zNearL, m_zFarL);
+      error = m_pCompositor->Submit(vr::Eye_Right, &m_VRTexture, &rightBounds, (vr::EVRSubmitFlags)flags);
       if (error != vr::VRCompositorError_None) {}
     }
 
@@ -196,9 +229,11 @@ void OpenVRDirectMode::StartFrame()
 
   AwaitPreviousFrame();
 
-  m_pCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
+  vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
+  m_pCompositor->WaitGetPoses(poses, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
 
   std::lock_guard<std::mutex> lk(m_mutex);
+  m_VRTexture.mDeviceToAbsoluteTracking = poses[0].mDeviceToAbsoluteTracking;
   m_frameRunning = true;
   m_timingInfoSubmitted = false;
 
@@ -227,6 +262,15 @@ void OpenVRDirectMode::SetFoveationParams(float centerLX, float centerLY, float 
   m_FoveationRadius2 = radius2;
   m_FoveationRadius3 = radius3;
 	m_FoveationNeedsUpdate = true;
+}
+
+
+void OpenVRDirectMode::SetZRange(float zNearL, float zFarL, float zNearR, float zFarR)
+{
+	m_zNearL = zNearL;
+	m_zFarL = zFarL;
+	m_zNearR = zNearR;
+	m_zFarR = zFarR;
 }
 
 void OpenVRDirectMode::UpdateFoveationMode(bool shouldEnable)

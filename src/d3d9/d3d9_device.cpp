@@ -1818,6 +1818,11 @@ namespace dxvk {
 
     UpdateActiveHazardsDS(std::numeric_limits<uint32_t>::max());
 
+
+    if (ds != nullptr) {
+      OpenVRDirectMode::Get()->OnRenderTargetChanged(this, ds, true);
+    }
+
     return D3D_OK;
   }
 

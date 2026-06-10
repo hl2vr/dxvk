@@ -9,8 +9,8 @@ OpenVRDirectMode *OpenVRDirectMode::Get() {
 }
 
 
-void DllExport dxvkInitOpenVR(vr::IVRCompositor *compositor) {
-  g_OpenVR.Init(compositor);
+void DllExport dxvkInitOpenVR(vr::IVRSystem* system, vr::IVRCompositor *compositor) {
+  g_OpenVR.Init(system, compositor);
 }
 
 void DllExport dxvkShutdownOpenVR() {
@@ -34,4 +34,9 @@ void DllExport dxvkEnableFoveatedRendering(bool enabled)
 void DllExport dxvkSetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3)
 {
   g_OpenVR.SetFoveationParams(centerLX, centerLY, centerRX, centerRY, radius1, radius2, radius3);
+}
+
+void DllExport dxvkSetZRange(float zNearL, float zFarL, float zNearR, float zFarR)
+{
+	g_OpenVR.SetZRange(zNearL, zFarL, zNearR, zFarR);
 }
