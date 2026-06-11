@@ -35,6 +35,9 @@ void OpenVRDirectMode::Shutdown() {
   m_pCompositor = nullptr;
   m_initialised = false;
   m_lastUsedDevice = nullptr;
+  m_vrsImage = nullptr;
+  m_vrsInterface = nullptr;
+  m_activeDevice = nullptr;
 }
 
 void OpenVRDirectMode::SetRenderTextureSize(uint32_t width, uint32_t height, int msaa) {
