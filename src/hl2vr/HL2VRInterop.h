@@ -26,7 +26,13 @@ public:
 
 	void SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose) override;
 
+	void EnableFoveatedRendering(bool enabled) override;
+	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3) override;
+
 private:
+	void UpdateFoveationMode(bool shouldEnable);
+	void UpdateFoveationTexture();
+
 	bool m_initialized = false;
 
 	vr::IVRSystem* m_vrSystem = nullptr;
@@ -46,6 +52,19 @@ private:
 
 	vr::HmdMatrix34_t m_headsetPoseForRendering;
 	vr::HmdMatrix34_t m_headsetPose;
+
+	bool m_FoveatedRenderingEnabled = false;
+	bool m_FoveationNeedsUpdate = false;
+	float m_FoveationCenterLX = 0.5f;
+	float m_FoveationCenterLY = 0.5f;
+	float m_FoveationCenterRX = 0.5f;
+	float m_FoveationCenterRY = 0.5f;
+	float m_FoveationRadius1 = 0.3f;
+	float m_FoveationRadius2 = 0.7f;
+	float m_FoveationRadius3 = 0.9f;
+	dxvk::Com<IDirect3DTexture9> m_vrsImage;
+	UINT m_vrsImageWidth = 0;
+	UINT m_vrsImageHeight = 0;
 };
 
 extern HL2VRInterop* g_hl2vr;

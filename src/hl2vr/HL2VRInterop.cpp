@@ -25,6 +25,7 @@ void HL2VRInterop::Shutdown()
 	m_vrCompositor = nullptr;
 
 	ResetRenderTextures(0, 0, 0);
+	m_vrsImage = nullptr;
 	m_device = nullptr;
 }
 
@@ -61,6 +62,8 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	m_device->m_d3d9Interop.ReleaseSubmissionQueue();
 	m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
 	m_frameAwaited = true;
+
+	UpdateFoveationTexture();
 }
 
 void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
@@ -159,6 +162,8 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 	{
 		m_colorTex = rt;
 	}
+
+	UpdateFoveationMode(m_colorTex == rt);
 }
 
 void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
@@ -177,6 +182,128 @@ void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 void HL2VRInterop::SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose)
 {
 	m_headsetPoseForRendering = pose;
+}
+
+void HL2VRInterop::EnableFoveatedRendering(bool enabled)
+{
+	if (enabled != m_FoveatedRenderingEnabled)
+		m_FoveationNeedsUpdate = true;
+	m_FoveatedRenderingEnabled = enabled;
+}
+
+void HL2VRInterop::SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3)
+{
+	m_FoveationCenterLX = centerLX;
+	m_FoveationCenterLY = centerLY;
+	m_FoveationCenterRX = centerRX;
+	m_FoveationCenterRY = centerRY;
+	m_FoveationRadius1 = radius1;
+	m_FoveationRadius2 = radius2;
+	m_FoveationRadius3 = radius3;
+	m_FoveationNeedsUpdate = true;
+}
+
+void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
+{
+	if (!m_FoveatedRenderingEnabled || !m_device)
+		return;
+
+	if (shouldEnable)
+		m_device->m_d3d9VRS.Enable();
+	else
+		m_device->m_d3d9VRS.Disable();
+}
+
+void HL2VRInterop::UpdateFoveationTexture()
+{
+	if (!m_device)
+		return;
+
+	auto* vrsInterface = &m_device->m_d3d9VRS;
+
+	if (m_FoveationNeedsUpdate)
+	{
+		m_FoveationNeedsUpdate = false;
+		if (m_FoveatedRenderingEnabled)
+		{
+			VkExtent2D minTexelSize = vrsInterface->GetMinTexelSize();
+			VkExtent2D maxTexelSize = vrsInterface->GetMaxTexelSize();
+			VkExtent2D desiredTexelSize;
+			desiredTexelSize.width = dxvk::clamp(16u, minTexelSize.width, maxTexelSize.height);
+			desiredTexelSize.height = dxvk::clamp(16u, minTexelSize.height, maxTexelSize.height);
+
+			UINT desiredVrsImageWidth = (m_renderWidth + desiredTexelSize.width - 1) / desiredTexelSize.width;
+			UINT desiredVrsImageHeight = (m_renderHeight + desiredTexelSize.height - 1) / desiredTexelSize.height;
+
+			if (!m_vrsImage || desiredVrsImageWidth != m_vrsImageWidth || desiredVrsImageHeight != m_vrsImageHeight)
+			{
+				m_vrsImageWidth = desiredVrsImageWidth;
+				m_vrsImageHeight = desiredVrsImageHeight;
+				m_vrsImage = nullptr;
+				dxvk::Logger::info("Creating VRS image with dimensions: " + std::to_string(m_vrsImageWidth) + "x" + std::to_string(m_vrsImageHeight));
+				HRESULT result = m_device->CreateTexture(m_vrsImageWidth, m_vrsImageHeight, 1, D3DUSAGE_DYNAMIC | D3DUSAGE_VRS, D3DFMT_A8, D3DPOOL_DEFAULT, &m_vrsImage, nullptr);
+				if (FAILED(result))
+				{
+					dxvk::Logger::warn("VRS image creation failed: " + std::to_string(result));
+				}
+			}
+
+			if (!m_vrsImage)
+				return;
+
+			D3DLOCKED_RECT lockedRect;
+			if (m_vrsImage->LockRect(0, &lockedRect, nullptr, D3DLOCK_DISCARD) == D3D_OK)
+			{
+				BYTE *data = (BYTE *)lockedRect.pBits;
+				UINT halfWidth = m_vrsImageWidth / 2;
+				UINT centerX1 = halfWidth * m_FoveationCenterLX;
+				UINT centerX2 = halfWidth * m_FoveationCenterRX + halfWidth;
+				UINT centerY1 = m_vrsImageHeight * m_FoveationCenterLY;
+				UINT centerY2 = m_vrsImageHeight * m_FoveationCenterRY;
+				UINT radius1 = m_vrsImageHeight * 0.5f * m_FoveationRadius1;
+				UINT radius2 = m_vrsImageHeight * 0.5f * m_FoveationRadius2;
+				UINT radius3 = m_vrsImageHeight * 0.5f * m_FoveationRadius3;
+				for (UINT y = 0; y < m_vrsImageHeight; ++y)
+				{
+					for (UINT x = 0; x < m_vrsImageWidth; ++x)
+					{
+						UINT distSqr1 = (x - centerX1) * (x - centerX1) + (y - centerY1) * (y - centerY1);
+						UINT distSqr2 = (x - centerX2) * (x - centerX2) + (y - centerY2) * (y - centerY2);
+						UINT distSqr = std::min(distSqr1, distSqr2);
+						UINT idx = y * lockedRect.Pitch + x;
+						if (distSqr >= radius3 * radius3)
+						{
+							data[idx] = 0x0A; // 4x4 block
+						}
+						else if (distSqr >= radius2 * radius2)
+						{
+							data[idx] = 0x05; // 2x2 block
+						}
+						else if (distSqr >= radius1 * radius1)
+						{
+							UINT horz = std::min(std::fabs(x - centerX1), fabs(x - centerX2));
+							UINT vert = std::min(std::fabs(y - centerY1), fabs(y - centerY2));
+							if (vert <= horz)
+								data[idx] = 0x01; // 1x2 block
+							else
+								data[idx] = 0x04; // 2x1 block
+						}
+						else
+						{
+							data[idx] = 0;
+						}
+					}
+				}
+				m_vrsImage->UnlockRect(0);
+			}
+
+			vrsInterface->SetShadingRateImage(m_vrsImage.ptr(), desiredTexelSize);
+		}
+		else
+		{
+			vrsInterface->Disable();
+		}
+	}
 }
 
 }
