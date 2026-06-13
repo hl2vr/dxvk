@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IHL2VRInterop.h"
+#include "openvr/openvr.hpp"
 
 #include <d3d9.h>
 #include <d3d9_device.h>
@@ -16,12 +17,14 @@ public:
 
 	void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) override;
 
-	void AwaitFrame() override;
+	void AwaitFrame(bool matQueueMode) override;
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
 	void OnPostPresent(D3D9DeviceEx* device);
 	void OnSetRenderTarget(IDirect3DSurface9 *rt);
 	void OnSetDepthStencil(IDirect3DSurface9 *depth);
+
+	void SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose) override;
 
 private:
 	bool m_initialized = false;
@@ -39,6 +42,10 @@ private:
 	std::atomic<bool> m_frameAwaited = false;
 	mutex m_frameSyncMutex;
 	condition_variable m_condFramePresented;
+	std::atomic<int> m_frameCounter = 0;
+
+	vr::HmdMatrix34_t m_headsetPoseForRendering;
+	vr::HmdMatrix34_t m_headsetPose;
 };
 
 extern HL2VRInterop* g_hl2vr;
