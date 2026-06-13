@@ -47,8 +47,12 @@ d3d9_src = [
   'd3d9_interop.cpp',
   'd3d9_on_12.cpp',
   'd3d9_bridge.cpp',
+  '../hl2vr/hmdWrapper.h',
   '../hl2vr/hmdWrapper.cpp',
-  '../hl2vr/OpenVRDirectMode.cpp'
+  '../hl2vr/OpenVRDirectMode.cpp',
+  '../hl2vr/IHL2VRInterop.h',
+  '../hl2vr/HL2VRInterop.h',
+  '../hl2vr/HL2VRInterop.cpp'
 ]
 
 d3d9_ld_args      = []
