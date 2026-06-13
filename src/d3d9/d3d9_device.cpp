@@ -28,6 +28,7 @@
 #include "d3d9_initializer.h"
 
 #include "VkSubmitThreadCallback.h"
+#include "../hl2vr/HL2VRInterop.h"
 #include "../hl2vr/OpenVRDirectMode.h"
 
 #include <algorithm>
@@ -206,7 +207,7 @@ namespace dxvk {
 
     m_unlockAdditionalFormats = m_parent->HasFormatsUnlocked();
 
-    g_pVkSubmitThreadCallback = OpenVRDirectMode::Get();
+    //g_pVkSubmitThreadCallback = OpenVRDirectMode::Get();
   }
 
 
@@ -681,10 +682,11 @@ namespace dxvk {
     desc.Format             = EnumerateFormat(Format);
     desc.Pool               = Pool;
     desc.Discard            = FALSE;
-    desc.MultiSample        = (D3DMULTISAMPLE_TYPE)OpenVRDirectMode::Get()->DetermineMSAA(Width, Height);
+    desc.MultiSample        = D3DMULTISAMPLE_NONE;
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
+  	g_hl2vr->ModifyTextureCreationDetails(desc);
     // Docs:
     // Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
     // unless they are dynamic textures or they are private, FOURCC, driver formats.
@@ -1682,6 +1684,12 @@ namespace dxvk {
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::SetRenderTarget(
           DWORD              RenderTargetIndex,
           IDirect3DSurface9* pRenderTarget) {
+
+  	if (RenderTargetIndex == 0)
+  	{
+  		g_hl2vr->OnSetRenderTarget(pRenderTarget);
+  	}
+
     D3D9DeviceLock lock = LockDevice();
 
     if (unlikely(pRenderTarget == nullptr && RenderTargetIndex == 0))
@@ -1812,7 +1820,7 @@ namespace dxvk {
     }
 
     if (rt != nullptr) {
-      OpenVRDirectMode::Get()->OnRenderTargetChanged(this, rt);
+      //OpenVRDirectMode::Get()->OnRenderTargetChanged(this, rt);
     }
 
     return D3D_OK;
@@ -1839,6 +1847,8 @@ namespace dxvk {
 
 
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::SetDepthStencilSurface(IDirect3DSurface9* pNewZStencil) {
+  	g_hl2vr->OnSetDepthStencil(pNewZStencil);
+
     D3D9DeviceLock lock = LockDevice();
 
     D3D9Surface* ds = static_cast<D3D9Surface*>(pNewZStencil);
@@ -1870,7 +1880,7 @@ namespace dxvk {
 
 
     if (ds != nullptr) {
-      OpenVRDirectMode::Get()->OnRenderTargetChanged(this, ds, true);
+      //OpenVRDirectMode::Get()->OnRenderTargetChanged(this, ds, true);
     }
 
     return D3D_OK;
@@ -4342,7 +4352,7 @@ namespace dxvk {
       }
     }
 
-    OpenVRDirectMode::Get()->PrePresent(this);
+    //OpenVRDirectMode::Get()->PrePresent(this);
 
     HRESULT result = m_implicitSwapchain->Present(
       pSourceRect,
@@ -4351,7 +4361,8 @@ namespace dxvk {
       pDirtyRegion,
       dwFlags);
 
-    OpenVRDirectMode::Get()->PostPresent();
+    //OpenVRDirectMode::Get()->PostPresent();
+  	g_hl2vr->OnPostPresent(this);
 
     return result;
   }

@@ -1,9 +1,12 @@
 #pragma once
 
 #include "../../include/openvr/openvr.hpp"
+#include "IHL2VRInterop.h"
 
 #define DllExport __declspec(dllexport)
 #define DllImport __declspec(dllimport)
+
+DllExport IHL2VRInterop* dxvkGetHL2VRInterop();
 
 // Initialize our OpenVR handling in dxvk by passing the Compositor interface
 void DllExport dxvkInitOpenVR(vr::IVRSystem* system, vr::IVRCompositor *compositor);

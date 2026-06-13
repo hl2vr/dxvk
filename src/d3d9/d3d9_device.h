@@ -226,6 +226,7 @@ namespace dxvk {
     friend class D3D9ConstantBuffer;
     friend class D3D9UserDefinedAnnotation;
     friend class DxvkD3D8Bridge;
+    friend class HL2VRInterop;
     friend D3D9VkInteropDevice;
     friend D3D9VRS;
   public:
