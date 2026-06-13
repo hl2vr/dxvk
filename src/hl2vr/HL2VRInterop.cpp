@@ -35,15 +35,13 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 	m_msaa = msaa;
 }
 
-void HL2VRInterop::AwaitFrame()
+void HL2VRInterop::AwaitFrame(bool matQueueMode)
 {
 	if (!m_initialized)
 		return;
 
 	if (!m_device)
 		return;
-	// flush and await all queued rendering commands to ensure that the Present call was executed
-	m_device->m_d3d9Interop.FlushRenderingCommands();
 
 	std::unique_lock lock(m_frameSyncMutex);
 	if (m_frameAwaited)
@@ -56,9 +54,12 @@ void HL2VRInterop::AwaitFrame()
 		m_frameAwaited = false;
 	}
 
+	++m_frameCounter;
 	m_device->m_d3d9Interop.LockSubmissionQueue();
-	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
+	vr::TrackedDevicePose_t hmdPose;
+	m_vrCompositor->WaitGetPoses(&hmdPose, 1, nullptr, 0);
 	m_device->m_d3d9Interop.ReleaseSubmissionQueue();
+	m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
 	m_frameAwaited = true;
 }
 
@@ -129,17 +130,21 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 			textureInfo.eType = vr::TextureType_Vulkan;
 			textureInfo.eColorSpace = vr::ColorSpace_Auto;
 			textureInfo.handle = (void*)&vulkanData;
+			textureInfo.mDeviceToAbsoluteTracking = m_headsetPose;
 
 			vr::VRTextureBounds_t boundsLeft = { 0.f, 0.f, 0.5f, 1.f };
-			m_vrCompositor->Submit(vr::Eye_Left, &textureInfo, &boundsLeft);
+			m_vrCompositor->Submit(vr::Eye_Left, &textureInfo, &boundsLeft, vr::Submit_TextureWithPose);
 			vr::VRTextureBounds_t boundsRight = { 0.5f, 0.f, 1.f, 1.f };
-			m_vrCompositor->Submit(vr::Eye_Right, &textureInfo, &boundsRight);
+			m_vrCompositor->Submit(vr::Eye_Right, &textureInfo, &boundsRight, vr::Submit_TextureWithPose);
 			m_vrCompositor->PostPresentHandoff();
 
 			device->m_d3d9Interop.ReleaseSubmissionQueue();
 		}
 
+		m_colorTex = nullptr;
+		m_depthTex = nullptr;
 		m_frameAwaited = false;
+		m_condFramePresented.notify_one();
 	}
 }
 
@@ -150,7 +155,7 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 
 	D3DSURFACE_DESC desc;
 	rt->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && !m_colorTex)
 	{
 		m_colorTex = rt;
 	}
@@ -163,10 +168,15 @@ void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 
 	D3DSURFACE_DESC desc;
 	depth->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && !m_depthTex)
 	{
 		m_depthTex = depth;
 	}
+}
+
+void HL2VRInterop::SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose)
+{
+	m_headsetPoseForRendering = pose;
 }
 
 }
