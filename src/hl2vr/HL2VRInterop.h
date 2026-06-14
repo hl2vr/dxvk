@@ -29,6 +29,8 @@ public:
 	void EnableFoveatedRendering(bool enabled) override;
 	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3) override;
 
+	void SetZRange(float nearZ, float farZ) override;
+
 private:
 	void UpdateFoveationMode(bool shouldEnable);
 	void UpdateFoveationTexture();
@@ -65,6 +67,9 @@ private:
 	dxvk::Com<IDirect3DTexture9> m_vrsImage;
 	UINT m_vrsImageWidth = 0;
 	UINT m_vrsImageHeight = 0;
+
+	float m_nearZ = 0;
+	float m_farZ = 0;
 };
 
 extern HL2VRInterop* g_hl2vr;

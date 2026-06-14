@@ -24,4 +24,6 @@ public:
 
 	virtual void EnableFoveatedRendering(bool enabled) = 0;
 	virtual void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3) = 0;
+
+	virtual void SetZRange(float nearZ, float farZ) = 0;
 };

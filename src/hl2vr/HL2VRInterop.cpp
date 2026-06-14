@@ -134,11 +134,24 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 			textureInfo.eColorSpace = vr::ColorSpace_Auto;
 			textureInfo.handle = (void*)&vulkanData;
 			textureInfo.mDeviceToAbsoluteTracking = m_headsetPose;
+			int submitFlags = vr::Submit_TextureWithPose;
+			if (m_depthTex != nullptr && m_farZ > m_nearZ)
+			{
+				submitFlags |= vr::Submit_TextureWithDepth;
+				textureInfo.depth.handle = (void*)&vulkanDepthData;
+				textureInfo.depth.vRange.v[0] = 0.f;
+				textureInfo.depth.vRange.v[1] = 1.f;
+				textureInfo.depth.mProjection = m_vrSystem->GetProjectionMatrix(vr::Eye_Left, m_nearZ, m_farZ);
+			}
 
 			vr::VRTextureBounds_t boundsLeft = { 0.f, 0.f, 0.5f, 1.f };
-			m_vrCompositor->Submit(vr::Eye_Left, &textureInfo, &boundsLeft, vr::Submit_TextureWithPose);
+			m_vrCompositor->Submit(vr::Eye_Left, &textureInfo, &boundsLeft, (vr::EVRSubmitFlags)submitFlags);
 			vr::VRTextureBounds_t boundsRight = { 0.5f, 0.f, 1.f, 1.f };
-			m_vrCompositor->Submit(vr::Eye_Right, &textureInfo, &boundsRight, vr::Submit_TextureWithPose);
+			if (m_depthTex != nullptr && m_farZ > m_nearZ)
+			{
+				textureInfo.depth.mProjection = m_vrSystem->GetProjectionMatrix(vr::Eye_Right, m_nearZ, m_farZ);
+			}
+			m_vrCompositor->Submit(vr::Eye_Right, &textureInfo, &boundsRight, (vr::EVRSubmitFlags)submitFlags);
 			m_vrCompositor->PostPresentHandoff();
 
 			device->m_d3d9Interop.ReleaseSubmissionQueue();
@@ -201,6 +214,12 @@ void HL2VRInterop::SetFoveationParams(float centerLX, float centerLY, float cent
 	m_FoveationRadius2 = radius2;
 	m_FoveationRadius3 = radius3;
 	m_FoveationNeedsUpdate = true;
+}
+
+void HL2VRInterop::SetZRange(float nearZ, float farZ)
+{
+	m_nearZ = nearZ;
+	m_farZ = farZ;
 }
 
 void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
