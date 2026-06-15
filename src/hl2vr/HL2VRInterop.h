@@ -35,7 +35,7 @@ private:
 	void UpdateFoveationMode(bool shouldEnable);
 	void UpdateFoveationTexture();
 
-	bool m_initialized = false;
+	std::atomic<bool> m_initialized = false;
 
 	vr::IVRSystem* m_vrSystem = nullptr;
 	vr::IVRCompositor* m_vrCompositor = nullptr;
@@ -64,7 +64,7 @@ private:
 	float m_FoveationRadius1 = 0.3f;
 	float m_FoveationRadius2 = 0.7f;
 	float m_FoveationRadius3 = 0.9f;
-	dxvk::Com<IDirect3DTexture9> m_vrsImage;
+	Com<IDirect3DTexture9> m_vrsImage;
 	UINT m_vrsImageWidth = 0;
 	UINT m_vrsImageHeight = 0;
 

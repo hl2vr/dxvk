@@ -11,6 +11,7 @@ HL2VRInterop* g_hl2vr = &g_HL2VRInterop;
 
 void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor)
 {
+	std::unique_lock lock(m_frameSyncMutex);
 	m_vrSystem = vrSystem;
 	m_vrCompositor = vrCompositor;
 
@@ -19,12 +20,14 @@ void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor
 
 void HL2VRInterop::Shutdown()
 {
+	std::unique_lock lock(m_frameSyncMutex);
 	m_initialized = false;
 
 	m_vrSystem = nullptr;
 	m_vrCompositor = nullptr;
 
-	ResetRenderTextures(0, 0, 0);
+	m_colorTex = nullptr;
+	m_depthTex = nullptr;
 	m_vrsImage = nullptr;
 	m_device = nullptr;
 }
@@ -38,13 +41,13 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
 {
+	std::unique_lock lock(m_frameSyncMutex);
 	if (!m_initialized)
 		return;
 
 	if (!m_device)
 		return;
 
-	std::unique_lock lock(m_frameSyncMutex);
 	if (m_frameAwaited)
 	{
 		// still awaiting previous frame's present call
@@ -56,18 +59,28 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	}
 
 	++m_frameCounter;
-	m_device->m_d3d9Interop.LockSubmissionQueue();
-	vr::TrackedDevicePose_t hmdPose;
-	m_vrCompositor->WaitGetPoses(&hmdPose, 1, nullptr, 0);
-	m_device->m_d3d9Interop.ReleaseSubmissionQueue();
-	m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
-	m_frameAwaited = true;
+	if (m_colorTex != nullptr)
+	{
+		// only call WaitGetPoses if we have a color texture from the previous frame, as otherwise the Vulkan queues might be out of date
+		m_device->m_d3d9Interop.LockSubmissionQueue();
+		vr::TrackedDevicePose_t hmdPose;
+		m_vrCompositor->WaitGetPoses(&hmdPose, 1, nullptr, 0);
+		m_device->m_d3d9Interop.ReleaseSubmissionQueue();
+		m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
+		m_frameAwaited = true;
 
-	UpdateFoveationTexture();
+		UpdateFoveationTexture();
+	}
+
+	m_colorTex = nullptr;
+	m_depthTex = nullptr;
 }
 
 void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
 {
+	if (!m_initialized)
+		return;
+
 	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight)
 	{
 		desc.MultiSample = static_cast<D3DMULTISAMPLE_TYPE>(m_msaa);
@@ -111,10 +124,10 @@ static HRESULT PrepareTextureForSubmission(IDirect3DDevice9Ex *device, IDirect3D
 
 void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 {
+	std::unique_lock lock(m_frameSyncMutex);
 	if (!m_initialized)
 		return;
 
-	std::unique_lock lock(m_frameSyncMutex);
 	m_device = device;
 
 	if (m_frameAwaited)
@@ -157,8 +170,6 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 			device->m_d3d9Interop.ReleaseSubmissionQueue();
 		}
 
-		m_colorTex = nullptr;
-		m_depthTex = nullptr;
 		m_frameAwaited = false;
 		m_condFramePresented.notify_one();
 	}
@@ -166,7 +177,7 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 
 void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 {
-	if (rt == nullptr)
+	if (!m_initialized || rt == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;
@@ -181,7 +192,7 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 
 void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 {
-	if (depth == nullptr)
+	if (!m_initialized || depth == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;
@@ -224,7 +235,7 @@ void HL2VRInterop::SetZRange(float nearZ, float farZ)
 
 void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
 {
-	if (!m_FoveatedRenderingEnabled || !m_device)
+	if (!m_initialized || !m_FoveatedRenderingEnabled || !m_device)
 		return;
 
 	if (shouldEnable)
