@@ -8,12 +8,15 @@ namespace dxvk
 static HL2VRInterop g_HL2VRInterop;
 HL2VRInterop* g_hl2vr = &g_HL2VRInterop;
 
+VkSubmitThreadCallback *g_pVkSubmitThreadCallback = &g_HL2VRInterop;
+
 
 void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor)
 {
 	std::unique_lock lock(m_frameSyncMutex);
 	m_vrSystem = vrSystem;
 	m_vrCompositor = vrCompositor;
+	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
 
 	m_initialized = true;
 }
@@ -62,10 +65,8 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	if (m_colorTex != nullptr)
 	{
 		// only call WaitGetPoses if we have a color texture from the previous frame, as otherwise the Vulkan queues might be out of date
-		m_device->m_d3d9Interop.LockSubmissionQueue();
 		vr::TrackedDevicePose_t hmdPose;
 		m_vrCompositor->WaitGetPoses(&hmdPose, 1, nullptr, 0);
-		m_device->m_d3d9Interop.ReleaseSubmissionQueue();
 		m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
 		m_frameAwaited = true;
 
@@ -74,6 +75,7 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 
 	m_colorTex = nullptr;
 	m_depthTex = nullptr;
+	m_timingInfoSubmitted = false;
 }
 
 void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
@@ -87,92 +89,133 @@ void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
 	}
 }
 
-static HRESULT PrepareTextureForSubmission(IDirect3DDevice9Ex *device, IDirect3DSurface9 *texture, vr::VRVulkanTextureData_t &data)
+void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 {
-	Com<ID3D9VkInteropDevice> vkDevice;
-	device->QueryInterface(__uuidof(ID3D9VkInteropDevice), (void**) &vkDevice);
-	Com<ID3D9VkInteropTexture> vkTex;
-	texture->QueryInterface(__uuidof(ID3D9VkInteropTexture), (void**)&vkTex);
-	VkImage image;
-	VkImageCreateInfo createInfo {};
-	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	VkImageLayout curLayout;
-	HRESULT hr = vkTex->GetVulkanImageInfo(&image, &curLayout, &createInfo);
-	if (hr != S_OK)
-	{
-		return hr;
+	if (!m_initialized)
+		return;
+
+	std::unique_lock lock(m_frameSyncMutex);
+	m_device = device;
+	if (!m_initialized || !m_frameAwaited)
+		return;
+
+	// transition our render textures to proper image layout before submitting to OpenVR
+	if (m_colorTex != nullptr) {
+		auto *colorTexCommon = static_cast<D3D9Surface*>(m_colorTex.ptr())->GetCommonTexture();
+		VkImageSubresourceRange subresources = {
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0, colorTexCommon->GetImage()->info().mipLevels,
+			0, colorTexCommon->GetImage()->info().numLayers
+		  };
+		device->TransformImage(colorTexCommon, &subresources,
+		  colorTexCommon->GetImage()->info().layout,
+		  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	}
-
-	data.m_nFormat = createInfo.format;
-	data.m_nWidth = createInfo.extent.width;
-	data.m_nHeight = createInfo.extent.height;
-	data.m_nImage = (uint64_t)image;
-	data.m_nSampleCount = 1;
-	vkDevice->GetSubmissionQueue(&data.m_pQueue, nullptr, &data.m_nQueueFamilyIndex);
-	vkDevice->GetVulkanHandles(&data.m_pInstance, &data.m_pPhysicalDevice, &data.m_pDevice);
-
-	VkImageSubresourceRange range;
-	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	range.baseMipLevel = 0;
-	range.levelCount = 1;
-	range.baseArrayLayer = 0;
-	range.layerCount = 1;
-	vkDevice->TransitionTextureLayout(vkTex.ptr(), &range, curLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-	return S_OK;
+	if (m_depthTex != nullptr) {
+		auto *depthTexCommon = static_cast<D3D9Surface*>(m_depthTex.ptr())->GetCommonTexture();
+		VkImageSubresourceRange subresources = {
+			VK_IMAGE_ASPECT_DEPTH_BIT,
+			0, depthTexCommon->GetImage()->info().mipLevels,
+			0, depthTexCommon->GetImage()->info().numLayers
+		  };
+		device->TransformImage(depthTexCommon, &subresources,
+		  depthTexCommon->GetImage()->info().layout,
+		  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	}
 }
 
 void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 {
-	std::unique_lock lock(m_frameSyncMutex);
-	if (!m_initialized)
+}
+
+void HL2VRInterop::PreSubmitCallback()
+{
+	if (!m_initialized || !m_frameAwaited || m_timingInfoSubmitted)
 		return;
 
-	m_device = device;
-
-	if (m_frameAwaited)
-	{
-		vr::VRVulkanTextureData_t vulkanData, vulkanDepthData;
-		if (m_colorTex != nullptr)
-			PrepareTextureForSubmission(device, m_colorTex.ptr(), vulkanData);
-		if (m_depthTex != nullptr)
-			PrepareTextureForSubmission(device, m_depthTex.ptr(), vulkanDepthData);
-
-		if (m_colorTex != nullptr)
-		{
-			device->m_d3d9Interop.FlushRenderingCommands();
-			device->m_d3d9Interop.LockSubmissionQueue();
-			vr::VRTextureWithPoseAndDepth_t textureInfo;
-			textureInfo.eType = vr::TextureType_Vulkan;
-			textureInfo.eColorSpace = vr::ColorSpace_Auto;
-			textureInfo.handle = (void*)&vulkanData;
-			textureInfo.mDeviceToAbsoluteTracking = m_headsetPose;
-			int submitFlags = vr::Submit_TextureWithPose;
-			if (m_depthTex != nullptr && m_farZ > m_nearZ)
-			{
-				submitFlags |= vr::Submit_TextureWithDepth;
-				textureInfo.depth.handle = (void*)&vulkanDepthData;
-				textureInfo.depth.vRange.v[0] = 0.f;
-				textureInfo.depth.vRange.v[1] = 1.f;
-				textureInfo.depth.mProjection = m_vrSystem->GetProjectionMatrix(vr::Eye_Left, m_nearZ, m_farZ);
-			}
-
-			vr::VRTextureBounds_t boundsLeft = { 0.f, 0.f, 0.5f, 1.f };
-			m_vrCompositor->Submit(vr::Eye_Left, &textureInfo, &boundsLeft, (vr::EVRSubmitFlags)submitFlags);
-			vr::VRTextureBounds_t boundsRight = { 0.5f, 0.f, 1.f, 1.f };
-			if (m_depthTex != nullptr && m_farZ > m_nearZ)
-			{
-				textureInfo.depth.mProjection = m_vrSystem->GetProjectionMatrix(vr::Eye_Right, m_nearZ, m_farZ);
-			}
-			m_vrCompositor->Submit(vr::Eye_Right, &textureInfo, &boundsRight, (vr::EVRSubmitFlags)submitFlags);
-			m_vrCompositor->PostPresentHandoff();
-
-			device->m_d3d9Interop.ReleaseSubmissionQueue();
-		}
-
-		m_frameAwaited = false;
-		m_condFramePresented.notify_one();
+	std::unique_lock lock(m_frameSyncMutex);
+	if (m_initialized && m_frameAwaited && !m_timingInfoSubmitted) {
+		m_vrCompositor->SubmitExplicitTimingData();
+		m_timingInfoSubmitted = true;
 	}
+}
+
+void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextureData_t &data)
+{
+	D3D9Surface* rt = static_cast<D3D9Surface*>(surface);
+	D3DSURFACE_DESC desc;
+	rt->GetDesc(&desc);
+
+	data.m_nHeight = desc.Height;
+	data.m_nWidth = desc.Width;
+	// VkPhysicalDevice
+	auto dxvkDevice = m_device->GetDXVKDevice();
+	data.m_pPhysicalDevice = dxvkDevice->adapter()->handle();
+	// VkDevice
+	data.m_pDevice = dxvkDevice->handle();
+	// VkImage
+	data.m_nImage = (uint64_t)rt->GetCommonTexture()->GetImage()->handle();
+	// VkInstance
+	data.m_pInstance = dxvkDevice->instance()->vki()->instance();
+	// VkQueue
+	data.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
+	data.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
+	data.m_nFormat = VK_FORMAT_B8G8R8A8_UNORM;
+	data.m_nSampleCount = std::max(1, m_msaa);
+}
+
+void HL2VRInterop::PrePresentCallBack()
+{
+	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || !m_colorTex)
+		return;
+
+	std::unique_lock lock(m_frameSyncMutex);
+	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited)
+		return;
+
+	if (m_vrCompositor->CanRenderScene()) {
+		static vr::VRTextureBounds_t leftBounds = {0.0f, 0.0f, 0.5f, 1.0f};
+		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
+
+		vr::VRVulkanTextureData_t colorTexData, depthTexData;
+		FillTextureData(m_colorTex.ptr(), colorTexData);
+		vr::VRTextureWithPoseAndDepth_t submitInfo;
+		submitInfo.eType = vr::TextureType_Vulkan;
+		submitInfo.eColorSpace = vr::ColorSpace_Auto;
+		submitInfo.handle = (void*)&colorTexData;
+		submitInfo.mDeviceToAbsoluteTracking = m_headsetPose;
+
+		int flags = vr::Submit_TextureWithPose;
+		if (m_depthTex != nullptr)
+		{
+			flags |= vr::Submit_TextureWithDepth;
+			FillTextureData(m_depthTex.ptr(), depthTexData);
+			submitInfo.depth.handle = (void*)&depthTexData;
+			submitInfo.depth.mProjection = m_projectionLeft;
+			submitInfo.depth.vRange.v[0] = 0;
+			submitInfo.depth.vRange.v[1] = 1;
+		}
+		m_vrCompositor->Submit(vr::Eye_Left, &submitInfo, &leftBounds, (vr::EVRSubmitFlags)flags);
+
+		if (m_depthTex != nullptr)
+			submitInfo.depth.mProjection = m_projectionRight;
+		m_vrCompositor->Submit(vr::Eye_Right, &submitInfo, &rightBounds, (vr::EVRSubmitFlags)flags);
+	}
+}
+
+void HL2VRInterop::PostPresentCallback()
+{
+	if (!m_initialized || !m_frameAwaited)
+		return;
+
+	std::unique_lock lock(m_frameSyncMutex);
+	if (!m_initialized || !m_frameAwaited)
+		return;
+
+	m_vrCompositor->PostPresentHandoff();
+	m_timingInfoSubmitted = false;
+	m_frameAwaited = false;
+	m_condFramePresented.notify_one();
 }
 
 void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
@@ -229,8 +272,16 @@ void HL2VRInterop::SetFoveationParams(float centerLX, float centerLY, float cent
 
 void HL2VRInterop::SetZRange(float nearZ, float farZ)
 {
-	m_nearZ = nearZ;
-	m_farZ = farZ;
+	if (!m_initialized)
+		return;
+
+	if (nearZ != m_nearZ || farZ != m_farZ)
+	{
+		m_nearZ = nearZ;
+		m_farZ = farZ;
+		m_projectionLeft = m_vrSystem->GetProjectionMatrix(vr::Eye_Left, m_nearZ, m_farZ);
+		m_projectionRight = m_vrSystem->GetProjectionMatrix(vr::Eye_Right, m_nearZ, m_farZ);
+	}
 }
 
 void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
@@ -270,11 +321,11 @@ void HL2VRInterop::UpdateFoveationTexture()
 				m_vrsImageWidth = desiredVrsImageWidth;
 				m_vrsImageHeight = desiredVrsImageHeight;
 				m_vrsImage = nullptr;
-				dxvk::Logger::info("Creating VRS image with dimensions: " + std::to_string(m_vrsImageWidth) + "x" + std::to_string(m_vrsImageHeight));
+				Logger::info("Creating VRS image with dimensions: " + std::to_string(m_vrsImageWidth) + "x" + std::to_string(m_vrsImageHeight));
 				HRESULT result = m_device->CreateTexture(m_vrsImageWidth, m_vrsImageHeight, 1, D3DUSAGE_DYNAMIC | D3DUSAGE_VRS, D3DFMT_A8, D3DPOOL_DEFAULT, &m_vrsImage, nullptr);
 				if (FAILED(result))
 				{
-					dxvk::Logger::warn("VRS image creation failed: " + std::to_string(result));
+					Logger::warn("VRS image creation failed: " + std::to_string(result));
 				}
 			}
 

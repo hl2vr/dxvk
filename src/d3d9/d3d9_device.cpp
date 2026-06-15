@@ -37,8 +37,6 @@
 #pragma fenv_access (on)
 #endif
 
-VkSubmitThreadCallback *g_pVkSubmitThreadCallback = nullptr;
-
 namespace dxvk {
 
   D3D9DeviceEx::D3D9DeviceEx(
@@ -4353,6 +4351,7 @@ namespace dxvk {
     }
 
     //OpenVRDirectMode::Get()->PrePresent(this);
+  	g_hl2vr->OnPrePresent(this);
 
     HRESULT result = m_implicitSwapchain->Present(
       pSourceRect,
