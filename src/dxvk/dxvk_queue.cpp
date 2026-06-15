@@ -3,10 +3,10 @@
 
 #include "VkSubmitThreadCallback.h"
 
-extern VkSubmitThreadCallback *g_pVkSubmitThreadCallback;
-
 
 namespace dxvk {
+
+  extern VkSubmitThreadCallback *g_pVkSubmitThreadCallback;
   
   DxvkSubmissionQueue::DxvkSubmissionQueue(DxvkDevice* device, const DxvkQueueCallback& callback)
   : m_device(device), m_callback(callback),

@@ -3,13 +3,14 @@
 #include "IHL2VRInterop.h"
 #include "openvr/openvr.hpp"
 
+#include <VkSubmitThreadCallback.h>
 #include <d3d9.h>
 #include <d3d9_device.h>
 
 namespace dxvk
 {
 
-class HL2VRInterop : public IHL2VRInterop
+class HL2VRInterop : public IHL2VRInterop, public VkSubmitThreadCallback
 {
 public:
 	void Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor) override;
@@ -20,7 +21,11 @@ public:
 	void AwaitFrame(bool matQueueMode) override;
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
+	void OnPrePresent(D3D9DeviceEx* device);
 	void OnPostPresent(D3D9DeviceEx* device);
+	void PreSubmitCallback() override;
+	void PrePresentCallBack() override;
+	void PostPresentCallback() override;
 	void OnSetRenderTarget(IDirect3DSurface9 *rt);
 	void OnSetDepthStencil(IDirect3DSurface9 *depth);
 
@@ -35,6 +40,8 @@ private:
 	void UpdateFoveationMode(bool shouldEnable);
 	void UpdateFoveationTexture();
 
+	void FillTextureData(IDirect3DSurface9* surface, vr::VRVulkanTextureData_t& data);
+
 	std::atomic<bool> m_initialized = false;
 
 	vr::IVRSystem* m_vrSystem = nullptr;
@@ -48,6 +55,7 @@ private:
 	int m_msaa = 0;
 
 	std::atomic<bool> m_frameAwaited = false;
+	std::atomic<bool> m_timingInfoSubmitted = false;
 	mutex m_frameSyncMutex;
 	condition_variable m_condFramePresented;
 	std::atomic<int> m_frameCounter = 0;
@@ -70,6 +78,7 @@ private:
 
 	float m_nearZ = 0;
 	float m_farZ = 0;
+	vr::HmdMatrix44_t m_projectionLeft, m_projectionRight;
 };
 
 extern HL2VRInterop* g_hl2vr;
