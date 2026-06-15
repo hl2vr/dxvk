@@ -4,8 +4,6 @@
 
 #include <cstdint>
 
-#include "../spirv/spirv_module.h"
-
 class D3D9DeviceEx;
 
 namespace dxvk {
@@ -137,8 +135,6 @@ namespace dxvk {
     // Spec const word 0 determines whether the other spec constants are used rather than the spec const UBO
     static constexpr uint32_t MaxSpecDwords = 17;
 
-    static constexpr size_t UBOSize = MaxSpecDwords * sizeof(uint32_t);
-
     static constexpr std::array<BitfieldPosition, SpecConstantCount> Layout{{
       { 0, 0, 32 },  // SamplerType
 
@@ -163,7 +159,7 @@ namespace dxvk {
       { 5, 24, 2 },  // PointMode
       { 5, 26, 5 },  // DrefScaling
 
-      { 6, 31, 1 },  // FFGlobalSpecularEnabled.
+      { 6, 31, 1 },  // FFGlobalSpecularEnabled
       // Packed with Texture stage 0 but placed here out of order so every texture stage
       // has the same number of entries in the Layout array.
 
@@ -293,67 +289,6 @@ namespace dxvk {
     }
 
     std::array<uint32_t, MaxSpecDwords> data = {};
-  };
-
-  class D3D9ShaderSpecConstantManager {
-  public:
-    uint32_t get(SpirvModule &module, uint32_t specUbo, D3D9SpecConstantId id) {
-      return get(module, specUbo, id, 0, 32);
-    }
-
-    uint32_t get(SpirvModule &module, uint32_t specUbo, D3D9SpecConstantId id, uint32_t bitOffset, uint32_t bitCount, uint32_t uboOverride = 0) {
-      const auto &layout = D3D9SpecializationInfo::Layout[id];
-
-      uint32_t uintType = module.defIntType(32, 0);
-      uint32_t optimized = getOptimizedBool(module);
-
-      uint32_t quickValue     = uboOverride ? uboOverride : getSpecUBODword(module, specUbo, layout.dwordOffset);
-      uint32_t optimizedValue = getSpecConstDword(module, layout.dwordOffset);
-
-      uint32_t val = module.opSelect(uintType, optimized, optimizedValue, quickValue);
-      bitCount = std::min(bitCount, layout.sizeInBits - bitOffset);
-
-      if (bitCount == 32)
-        return val;
-
-      return module.opBitFieldUExtract(
-        module.defIntType(32, 0), val,
-        module.consti32(bitOffset + layout.bitOffset),
-        module.consti32(bitCount));
-    }
-
-  private:
-    uint32_t getSpecConstDword(SpirvModule &module, uint32_t idx) {
-      if (!m_specConstantIds[idx]) {
-        m_specConstantIds[idx] = module.specConst32(module.defIntType(32, 0), 0);
-        module.decorateSpecId(m_specConstantIds[idx], idx);
-      }
-
-      return m_specConstantIds[idx];
-    }
-
-    uint32_t getSpecUBODword(SpirvModule& module, uint32_t specUbo, uint32_t idx) {
-      uint32_t uintType = module.defIntType(32, 0);
-      uint32_t uintPtr  = module.defPointerType(uintType, spv::StorageClassUniform);
-
-      uint32_t member = module.constu32(idx);
-      uint32_t dword  = module.opLoad(uintType, module.opAccessChain(uintPtr, specUbo, 1, &member));
-
-      return dword;
-    }
-
-    uint32_t getOptimizedBool(SpirvModule& module) {
-      uint32_t boolType = module.defBoolType();
-
-      // The spec constant at MaxNumSpecConstants is set to True
-      // when this is an optimized pipeline.
-      uint32_t optimized = getSpecConstDword(module, MaxNumSpecConstants);
-      optimized = module.opINotEqual(boolType, optimized, module.constu32(0));
-
-      return optimized;
-    }
-
-    std::array<uint32_t, MaxNumSpecConstants + 1> m_specConstantIds = {};
   };
 
 }

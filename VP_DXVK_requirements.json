@@ -82,9 +82,13 @@
             },
             "features": {
                 "VkPhysicalDeviceFeatures": {
+                    "fragmentStoresAndAtomics": true,
+                    "samplerAnisotropy": true,
+                    "shaderInt16": true,
                     "shaderSampledImageArrayDynamicIndexing" : true
                 },
                 "VkPhysicalDeviceVulkan12Features": {
+                    "shaderInt8": true,
                     "descriptorIndexing" : true,
                     "descriptorBindingSampledImageUpdateAfterBind" : true,
                     "descriptorBindingUpdateUnusedWhilePending" : true,
@@ -103,7 +107,9 @@
             },
             "properties": {
                 "VkPhysicalDeviceProperties": {
-                    "maxPushConstantsSize" : 256
+                    "limits": {
+                            "maxPushConstantsSize" : 256
+                    }
                 }
             }
         },
@@ -113,6 +119,7 @@
                 "VK_KHR_maintenance8": 1,
                 "VK_KHR_maintenance9": 1,
                 "VK_KHR_maintenance10": 1,
+                "VK_KHR_maintenance11": 1,
                 "VK_KHR_present_id2": 1,
                 "VK_KHR_present_wait2": 1,
                 "VK_KHR_shader_subgroup_uniform_control_flow": 1,
@@ -126,10 +133,10 @@
             },
             "features": {
                 "VkPhysicalDeviceFeatures": {
+                    "largePoints": true,
                     "wideLines": true
                 },
                 "VkPhysicalDeviceVulkan11Features": {
-                    "shaderInt16": true,
                     "storagePushConstant16": true
                 },
                 "VkPhysicalDeviceMaintenance7FeaturesKHR": {
@@ -143,6 +150,9 @@
                 },
                 "VkPhysicalDeviceMaintenance10FeaturesKHR": {
                     "maintenance10": true
+                },
+                "VkPhysicalDeviceMaintenance11FeaturesKHR": {
+                    "maintenance11": true
                 },
                 "VkPhysicalDevicePresentId2FeaturesKHR": {
                     "presentId2": true
@@ -223,8 +233,7 @@
                 "VkPhysicalDeviceFeatures": {
                     "depthBounds": true,
                     "vertexPipelineStoresAndAtomics": true,
-                    "pipelineStatisticsQuery": true,
-                    "samplerAnisotropy": true
+                    "pipelineStatisticsQuery": true
                 },
                 "VkPhysicalDeviceMemoryPriorityFeaturesEXT": {
                     "memoryPriority": true
@@ -304,8 +313,7 @@
                 "VkPhysicalDeviceFeatures": {
                     "depthBounds": true,
                     "pipelineStatisticsQuery": true,
-                    "logicOp": true,
-                    "samplerAnisotropy": true
+                    "logicOp": true
                 },
                 "VkPhysicalDeviceMemoryPriorityFeaturesEXT": {
                     "memoryPriority": true
@@ -332,7 +340,6 @@
             "features": {
                 "VkPhysicalDeviceFeatures": {
                     "drawIndirectFirstInstance": true,
-                    "fragmentStoresAndAtomics": true,
                     "multiDrawIndirect": true,
                     "tessellationShader": true
                 }

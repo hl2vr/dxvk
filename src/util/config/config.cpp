@@ -270,14 +270,15 @@ namespace dxvk {
     { R"(\\armoredwarfare\.exe$)", {{
       { "d3d11.cachedDynamicResources",        "c" },
     }} },
-    /* Nioh 2                                     */
+    /* Nioh 2 - Fixes some fires looking glitchy  */
     { R"(\\nioh2\.exe$)", {{
       { "dxgi.deferSurfaceCreation",        "True" },
+      { "dxvk.zeroMappedMemory",            "True" },
     }} },
     /* Crazy Machines 3 - crashes on long device  *
      * descriptions                               */
     { R"(\\cm3\.exe$)", {{
-      { "dxgi.customDeviceDesc",            "DXVK Device" },
+      { "dxgi.customDeviceDesc",     "DXVK Device" },
     }} },
     /* World of Final Fantasy: Broken and useless use     *
      * of 4x MSAA throughout the renderer. Water doesn't  *
@@ -285,7 +286,7 @@ namespace dxvk {
      * us plebs aren't worthy of the divine pixel liquid. */
     { R"(\\WOFF\.exe$)", {{
       { "d3d11.disableMsaa",                "True" },
-      { "dxgi.customDeviceDesc",            "DXVK Device" },
+      { "dxgi.customDeviceDesc",     "DXVK Device" },
     }} },
     /* Mary Skelter 2 - Broken MSAA               */
     { R"(\\MarySkelter2\.exe$)", {{
@@ -361,7 +362,7 @@ namespace dxvk {
     /* The Evil Within 2 *
     * Game speeds up above 120 fps */
     { R"(\\TEW2\.exe$)", {{
-      { "dxgi.maxFrameRate",                 "-120" },
+      { "dxgi.maxFrameRate",                "-120" },
     }} },
     /* Sonic Frontiers - flickering shadows and   *
      * vegetation when GPU-bound                  */
@@ -508,7 +509,6 @@ namespace dxvk {
 
     /* A Hat in Time                              */
     { R"(\\HatinTimeGame\.exe$)", {{
-      { "d3d9.strictPow",                  "False" },
       { "d3d9.lenientClear",                "True" },
     }} },
     /* Anarchy Online                             */
@@ -595,9 +595,11 @@ namespace dxvk {
     }} },
     /* Counter Strike: Global Offensive
        Needs NVAPI to avoid a forced AO + Smoke
-       exploit so we must force AMD vendor ID.    */
+       exploit so we must force AMD vendor ID.
+       Also writes to buffer after unlocking it. */
     { R"(\\csgo\.exe$)", {{
       { "d3d9.hideNvidiaGpu",               "True" },
+      { "d3d9.forceDrawTimeBufferUpload",   "True" },
     }} },
     /* Vampire - The Masquerade Bloodlines        */
     { R"(\\vampire\.exe$)", {{
@@ -757,8 +759,8 @@ namespace dxvk {
      * Resolution change crash and cached         *
      * dynamic buffers for performance reasons    */
     { R"(\\eoa\.exe$)", {{
-      { "d3d9.cachedWriteOnlyBuffers",        "True" },
-      { "d3d9.countLosableResources",         "False" },
+      { "d3d9.cachedWriteOnlyBuffers",      "True" },
+      { "d3d9.countLosableResources",      "False" },
     }} },
     /* Supreme Commander & Forged Alliance Forever */
     { R"(\\(SupremeCommander|ForgedAlliance)\.exe$)", {{
@@ -942,7 +944,7 @@ namespace dxvk {
      * in mod New Vegas Reloaded. Nvidia path in  *
      * same mod use NvAPI_D3D9_StretchRectEx for  *
      * depth buffer resolves                      */
-    { R"(\\FalloutNV(Launcher)?\.exe$)", {{
+    { R"(\\Fallout( -)? New Vegas.*\\(FalloutNV)?(Launcher)?\.exe$)", {{
       { "d3d9.floatEmulation",            "Strict" },
       { "d3d9.hideNvidiaGpu",               "True" },
     }} },
@@ -1155,6 +1157,17 @@ namespace dxvk {
      * Fixes occasional vertex explosions         */
     { R"(\\W40k(_gog)?\.exe$)", {{
       { "dxvk.zeroMappedMemory",            "True" },
+    }} },
+    /* Insurgency
+       Writes to buffer after unlocking it. */
+    { R"(\\insurgency\.exe$)", {{
+      { "d3d9.forceDrawTimeBufferUpload",   "True" },
+    }} },
+    /* SimCity Societies: Destinations            *
+     * Needs depth format cube texture support    *
+     * in order to start up properly              */
+    { R"(\\SCSDestinations\.exe$)", {{
+      { "d3d9.supportCubeDepthFormats",     "True" },
     }} },
 
     /**********************************************/

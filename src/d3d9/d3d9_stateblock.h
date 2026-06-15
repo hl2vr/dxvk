@@ -345,7 +345,7 @@ namespace dxvk {
     }
 
     template <
-      DxsoProgramType  ProgramType,
+      D3D9ShaderType   ShaderType,
       D3D9ConstantType ConstantType,
       typename         T>
     HRESULT SetShaderConstants(
@@ -353,7 +353,7 @@ namespace dxvk {
       const T*    pConstantData,
             UINT  Count) {
       auto SetHelper = [&](auto& setCaptures) {
-        if constexpr (ProgramType == DxsoProgramTypes::VertexShader)
+        if constexpr (ShaderType == D3D9ShaderType::VertexShader)
           m_captures.flags.set(D3D9CapturedStateFlag::VsConstants);
         else
           m_captures.flags.set(D3D9CapturedStateFlag::PsConstants);
@@ -368,20 +368,13 @@ namespace dxvk {
             setCaptures.bConsts.set(reg, true);
         }
 
-        UpdateStateConstants<
-          ProgramType,
-          ConstantType,
-          T>(
-            &m_state,
-            StartRegister,
-            pConstantData,
-            Count,
-            false);
+        UpdateStateConstants<ShaderType, ConstantType, T>(
+          &m_state, StartRegister, pConstantData, Count);
 
         return D3D_OK;
       };
 
-      return ProgramType == DxsoProgramTypes::VertexShader
+      return ShaderType == D3D9ShaderType::VertexShader
         ? SetHelper(m_captures.vsConsts)
         : SetHelper(m_captures.psConsts);
     }

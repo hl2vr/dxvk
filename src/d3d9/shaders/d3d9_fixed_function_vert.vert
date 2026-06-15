@@ -98,7 +98,7 @@ struct D3D9FixedFunctionVS {
     D3DMATERIAL9 Material;
     float TweenFactor;
 
-    uint KeyPrimitives[4];
+    uint DataPrimitives[12];
 };
 
 #define D3D9FF_VertexBlendMode uint
@@ -129,132 +129,133 @@ const uint TCIOffset = 16;
 const uint TCIMask = (7 << TCIOffset);
 
 
-// Bindings have to match with computeResourceSlotId in dxso_util.h
-// computeResourceSlotId(
-//     DxsoProgramType::VertexShader,
-//     DxsoBindingType::ConstantBuffer,
-//     DxsoConstantBuffers::VSFixedFunction
-// ) = 4
-layout(set = 0, binding = 4, scalar, row_major) uniform ShaderData {
+layout(set = CBV_SET, binding = CBV_VS_FIXED_FUNCTION, scalar, row_major)
+uniform ShaderData {
     D3D9FixedFunctionVS data;
 };
 
-layout(push_constant, scalar, row_major) uniform RenderStates {
-    D3D9RenderStateInfo rs;
-};
-
-// Bindings have to match with computeResourceSlotId in dxso_util.h
-// computeResourceSlotId(
-//     DxsoProgramType::VertexShader,
-//     DxsoBindingType::ConstantBuffer,
-//     DxsoConstantBuffers::VSVertexBlendData
-// ) = 5
-layout(set = 0, binding = 5, std140, row_major) readonly buffer VertexBlendData {
+layout(set = CBV_SET, binding = CBV_VS_VERTEX_BLEND, std140, row_major)
+readonly buffer VertexBlendData {
     mat4 WorldViewArray[];
 };
 
-
-// Bindings have to match with computeResourceSlotId in dxso_util.h
-// computeResourceSlotId(
-//     DxsoProgramType::VertexShader,
-//     DxsoBindingType::ConstantBuffer,
-//     DxsoConstantBuffers::VSClipPlanes
-// ) = 3
-layout(set = 0, binding = 3, std140) uniform ClipPlanes {
+layout(set = CBV_SET, binding = CBV_VS_CLIP_PLANES, std140)
+uniform ClipPlanes {
     vec4 clipPlanes[MaxClipPlaneCount];
 };
 
+layout(push_constant, scalar, row_major)
+uniform RenderStates {
+    D3D9SharedPushData global;
 
-// Functions to extract information from the packed VS key
-// See D3D9FFShaderKeyVSData in d3d9_shader_types.h
+    layout(offset = MaxSharedPushDataSize)
+    D3D9VsPushData vs;
+    D3D9FfvsPushData ffvs;
+};
+
+// Return point size, min, max as raw float
+vec3 decodePointSize() {
+    uvec3 pointData = uvec3(
+        bitfieldExtract(vs.packedReservedAndPointSize, 16, 16),
+        bitfieldExtract(vs.packedPointSizeMinMax,  0, 16),
+        bitfieldExtract(vs.packedPointSizeMinMax, 16, 16));
+    return vec3(pointData) / 8.0f;
+}
+
+// Functions to extract information from the VS data
+// We can't use bools or uint8_t so we have to do this.
+// Storing every single bool as a 32 bit integer would make the buffer a little too huge.
+// See D3D9PackedFFVSData in d3d9_state.h
 // Please, dearest compiler, inline all of this.
-uint texcoordIndices() {
-    return bitfieldExtract(data.KeyPrimitives[0], 0, 24);
+
+uint extractByte(uint offset) {
+    uint dword = data.DataPrimitives[offset / 4u];
+    return bitfieldExtract(dword, (int(offset) % 4) * 8, 8);
+}
+
+uint texcoordIndex(uint index) {
+    return extractByte(index);
 }
 bool vertexHasPositionT() {
-    return bitfieldExtract(data.KeyPrimitives[0], 24, 1) != 0;
+    return extractByte(28) != 0;
 }
 bool vertexHasColor0() {
-    return bitfieldExtract(data.KeyPrimitives[0], 25, 1) != 0;
+    return extractByte(29) != 0;
 }
 bool vertexHasColor1() {
-    return bitfieldExtract(data.KeyPrimitives[0], 26, 1) != 0;
+    return extractByte(30) != 0;
 }
 bool vertexHasPointSize() {
-    return bitfieldExtract(data.KeyPrimitives[0], 27, 1) != 0;
+    return extractByte(31) != 0;
 }
 bool useLighting() {
-    return bitfieldExtract(data.KeyPrimitives[0], 28, 1) != 0;
+    return extractByte(40) != 0;
 }
 bool normalizeNormals() {
-    return bitfieldExtract(data.KeyPrimitives[0], 29, 1) != 0;
+    return extractByte(37) != 0;
 }
 bool localViewer() {
-    return bitfieldExtract(data.KeyPrimitives[0], 30, 1) != 0;
+    return extractByte(38) != 0;
 }
 bool rangeFog() {
-    return bitfieldExtract(data.KeyPrimitives[0], 31, 1) != 0;
+    return extractByte(39) != 0;
 }
 
-uint texcoordFlags() {
-    return bitfieldExtract(data.KeyPrimitives[1], 0, 24);
+uint texcoordFlags(uint index) {
+    return extractByte(TextureStageCount + index);
 }
 uint diffuseSource() {
-    return bitfieldExtract(data.KeyPrimitives[1], 24, 2);
+    return extractByte(42);
 }
 uint ambientSource() {
-    return bitfieldExtract(data.KeyPrimitives[1], 26, 2);
+    return extractByte(43);
 }
 uint specularSource() {
-    return bitfieldExtract(data.KeyPrimitives[1], 28, 2);
+    return extractByte(44);
 }
 uint emissiveSource() {
-    return bitfieldExtract(data.KeyPrimitives[1], 30, 2);
+    return extractByte(45);
 }
 
-uint transformFlags() {
-    return bitfieldExtract(data.KeyPrimitives[2], 0, 24);
+uint texcoordTransformFlags(uint index) {
+    return extractByte(TextureStageCount * 2 + index);
 }
 uint lightCount() {
-    return bitfieldExtract(data.KeyPrimitives[2], 24, 4);
-}
-bool specularEnabled() {
-    return bitfieldExtract(data.KeyPrimitives[2], 28, 1) != 0;
+    return extractByte(41);
 }
 
 uint vertexTexcoordDeclMask() {
-    return bitfieldExtract(data.KeyPrimitives[3], 0, 24);
+    return data.DataPrimitives[24 / 4];
 }
 bool vertexHasFog() {
-    return bitfieldExtract(data.KeyPrimitives[3], 24, 1) != 0;
+    return extractByte(32) != 0;
 }
 D3D9FF_VertexBlendMode blendMode() {
-    return bitfieldExtract(data.KeyPrimitives[3], 25, 2);
+    return extractByte(33);
 }
 bool vertexBlendIndexed() {
-    return bitfieldExtract(data.KeyPrimitives[3], 27, 1) != 0;
+    return extractByte(34) != 0;
 }
 uint vertexBlendCount() {
-    return bitfieldExtract(data.KeyPrimitives[3], 28, 2);
+    return extractByte(35);
 }
 bool vertexClipping() {
-    return bitfieldExtract(data.KeyPrimitives[3], 30, 1) != 0;
+    return extractByte(36) != 0;
 }
 
 
-float calculateFog(vec4 vPos, vec4 oColor) {
+float calculateFog(vec4 vPos) {
     vec4 specular = in_Color1;
     bool hasSpecular = vertexHasColor1();
 
-    vec3 fogColor = vec3(rs.fogColor[0], rs.fogColor[1], rs.fogColor[2]);
-    float fogScale = rs.fogScale;
-    float fogEnd = rs.fogEnd;
-    float fogDensity = rs.fogDensity;
+    float fogScale = global.fogDistanceScale;
+    float fogEnd = global.fogDistanceEnd;
+    float fogDensity = global.fogDensity;
+
     D3DFOGMODE fogMode = specUint(SpecVertexFogMode);
-    bool fogEnabled = specBool(SpecFogEnabled);
-    if (!fogEnabled) {
+
+    if (!specBool(SpecFogEnabled))
         return 0.0;
-    }
 
     float w = vPos.w;
     float z = vPos.z;
@@ -270,6 +271,7 @@ float calculateFog(vec4 vPos, vec4 oColor) {
         fogFactor = hasSpecular ? specular.w : 1.0;
     } else {
         switch (fogMode) {
+            default:
             case D3DFOG_NONE:
                 fogFactor = hasSpecular ? specular.w : 1.0;
                 break;
@@ -302,12 +304,14 @@ float calculateFog(vec4 vPos, vec4 oColor) {
 
 
 float calculatePointSize(vec4 vtx) {
-    float value = vertexHasPointSize() ? in_PointSize : rs.pointSize;
+    vec3 pointSizeArgs = decodePointSize();
+
+    float value = vertexHasPointSize() ? in_PointSize : pointSizeArgs.x;
     uint pointMode = specUint(SpecPointMode);
     bool isScale = bitfieldExtract(pointMode, 0, 1) != 0;
-    float scaleC = rs.pointScaleC;
-    float scaleB = rs.pointScaleB;
-    float scaleA = rs.pointScaleA;
+    float scaleC = ffvs.pointScaleC;
+    float scaleB = ffvs.pointScaleB;
+    float scaleA = ffvs.pointScaleA;
 
     vec3 vtx3 = vtx.xyz;
 
@@ -321,8 +325,8 @@ float calculatePointSize(vec4 vtx) {
 
     value = isScale ? scaleValue : value;
 
-    float pointSizeMin = rs.pointSizeMin;
-    float pointSizeMax = rs.pointSizeMax;
+    float pointSizeMin = pointSizeArgs.y;
+    float pointSizeMax = pointSizeArgs.z;
 
     return clamp(value, pointSizeMin, pointSizeMax);
 }
@@ -376,7 +380,7 @@ void main() {
             for (uint i = 0; i <= vertexBlendCount(); i++) {
                 uint arrayIndex;
                 if (vertexBlendIndexed()) {
-                    arrayIndex = uint(round(in_BlendIndices[i]));
+                    arrayIndex = uint(roundEven(in_BlendIndices[i]));
                 } else {
                     arrayIndex = i;
                 }
@@ -450,13 +454,13 @@ void main() {
 
     for (uint i = 0; i < TextureStageCount; i++) {
         // 0b111 = 7
-        uint inputIndex = (texcoordIndices() >> (i * 3)) & 7;
-        uint inputFlags = (texcoordFlags() >> (i * 3)) & 7;
+        uint inputIndex = texcoordIndex(i);
+        uint inputFlags = texcoordFlags(i);
         uint texcoordCount = (vertexTexcoordDeclMask() >> (inputIndex * 3)) & 7;
 
         vec4 transformed;
 
-        uint flags = (transformFlags() >> (i * 3)) & 7;
+        uint flags = texcoordTransformFlags(i);
 
         // Passing 0xffffffff results in it getting clamped to the dimensions of the texture coords and getting treated as PROJECTED
         // but D3D9 does not apply the transformation matrix.
@@ -688,7 +692,7 @@ void main() {
         finalColor1 = clamp(finalColor1, vec4(0.0), vec4(1.0));
 
         out_Color0 = finalColor0;
-        if (specularEnabled()) {
+        if (specBool(SpecFFGlobalSpecularEnabled)) {
             out_Color1 = finalColor1;
         } else {
             out_Color1 = vertexHasColor1() ? in_Color1 : vec4(0.0, 0.0, 0.0, 1.0);
@@ -701,7 +705,7 @@ void main() {
         //       Implement that using a spec constant.
     }
 
-    out_Fog = calculateFog(vtx, vec4(0.0));
+    out_Fog = calculateFog(vtx);
 
     gl_PointSize = calculatePointSize(vtx);
 

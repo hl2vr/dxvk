@@ -29,18 +29,8 @@ layout(location = 0) out vec4 out_Color0;
 
 
 const uint TextureArgCount = 3;
-const uint MaxSharedPushDataSize = 64;
 
 #include "d3d9_fixed_function_common.glsl"
-
-struct D3D9FFTextureStage {
-    uint Primitive[2];
-};
-
-struct D3D9FixedFunctionPS {
-    vec4 textureFactor;
-    D3D9FFTextureStage Stages[8];
-};
 
 struct D3D9SharedPSStage {
     float Constant[4];
@@ -111,77 +101,33 @@ const uint VK_COMPARE_OP_ALWAYS           = 7;
 
 const uint PerTextureStageSpecConsts = SpecFFTextureStage1ColorOp - SpecFFTextureStage0ColorOp;
 
-
-// Bindings have to match with computeResourceSlotId in dxso_util.h
-// computeResourceSlotId(
-//     DxsoProgramType::PixelShader,
-//     DxsoBindingType::ConstantBuffer,
-//     DxsoConstantBuffers::PSFixedFunction
-// ) = 11
-layout(set = 0, binding = 11, scalar, row_major) uniform ShaderData {
-    D3D9FixedFunctionPS data;
-};
-
-// Bindings have to match with computeResourceSlotId in dxso_util.h
-// computeResourceSlotId(
-//     DxsoProgramType::PixelShader,
-//     DxsoBindingType::ConstantBuffer,
-//     DxsoConstantBuffers::PSShared
-// ) = 12
-layout(set = 0, binding = 12, scalar, row_major) uniform SharedData {
+layout(set = CBV_SET, binding = CBV_PS_SHARED, scalar, row_major)
+uniform SharedData {
     D3D9SharedPS sharedData;
 };
 
-layout(push_constant, scalar, row_major) uniform RenderStates {
-    D3D9RenderStateInfo rs;
+layout(push_constant, scalar, row_major)
+uniform RenderStates {
+    D3D9SharedPushData global;
 
-    layout(offset = MaxSharedPushDataSize) uint packedSamplerIndices[TextureStageCount / 2];
+    layout(offset = MaxSharedPushDataSize)
+    D3D9FfpsPushData ffps;
+
+    uint packedSamplerIndices[TextureStageCount / 2u];
 };
 
-layout(set = 0, binding = 13) uniform texture2D t2d[TextureStageCount];
-layout(set = 0, binding = 13) uniform textureCube tcube[TextureStageCount];
-layout(set = 0, binding = 13) uniform texture3D t3d[TextureStageCount];
+layout(set = SRV_SET, binding = SRV_PS_BASE) uniform texture2D t2d[TextureStageCount];
+layout(set = SRV_SET, binding = SRV_PS_BASE) uniform textureCube tcube[TextureStageCount];
+layout(set = SRV_SET, binding = SRV_PS_BASE) uniform texture3D t3d[TextureStageCount];
 
-layout(set = 1, binding = 0) uniform sampler sampler_heap[];
-
-
-// Functions to extract information from the packed texture stages
-uint colorOp(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[0], 0, 5);
-}
-uint colorArg0(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[0], 5, 6);
-}
-uint colorArg1(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[0], 11, 6);
-}
-uint colorArg2(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[0], 17, 6);
-}
-
-uint alphaOp(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[0], 23, 5);
-}
-uint alphaArg0(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[1], 0, 6);
-}
-uint alphaArg1(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[1], 6, 6);
-}
-uint alphaArg2(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[1], 12, 6);
-}
-
-bool resultIsTemp(uint stageIndex) {
-    return bitfieldExtract(data.Stages[stageIndex].Primitive[1], 18, 1) != 0;
-}
-
+layout(set = SAMPLER_SET, binding = 0) uniform sampler sampler_heap[];
 
 vec4 calculateFog(vec4 vPos, vec4 oColor) {
-    vec3 fogColor = vec3(rs.fogColor[0], rs.fogColor[1], rs.fogColor[2]);
-    float fogScale = rs.fogScale;
-    float fogEnd = rs.fogEnd;
-    float fogDensity = rs.fogDensity;
+    vec3 fogColor = unpackUnorm4x8(global.packedFogColorAndAlphaRef).bgr;
+    float fogScale = global.fogDistanceScale;
+    float fogEnd = global.fogDistanceEnd;
+    float fogDensity = global.fogDensity;
+
     D3DFOGMODE fogMode = specUint(SpecPixelFogMode);
     bool fogEnabled = specBool(SpecFogEnabled);
     if (!fogEnabled) {
@@ -201,7 +147,6 @@ vec4 calculateFog(vec4 vPos, vec4 oColor) {
         case D3DFOG_LINEAR:
             fogFactor = fogEnd - depth;
             fogFactor = fogFactor * fogScale;
-            fogFactor = spvNClamp(fogFactor, 0.0, 1.0);
             break;
 
         // 1 / (e^[d * density])^2
@@ -218,6 +163,8 @@ vec4 calculateFog(vec4 vPos, vec4 oColor) {
             fogFactor = exp(fogFactor);
             break;
     }
+
+    fogFactor = spvNClamp(fogFactor, 0.0, 1.0);
 
     vec4 color = oColor;
     vec3 color3 = color.rgb;
@@ -270,7 +217,7 @@ vec4 sampleTexture(uint stage, vec4 texcoord, vec4 previousStageTextureVal) {
 
     uint previousStageColorOp = 0;
     if (stage > 0) {
-        previousStageColorOp = specIsOptimized() ? specUint(SpecFFTextureStage0ColorOp + PerTextureStageSpecConsts * (stage - 1)) : colorOp(stage - 1);
+        previousStageColorOp = specUint(SpecFFTextureStage0ColorOp + PerTextureStageSpecConsts * (stage - 1));
     }
 
     if (stage != 0 && (
@@ -349,7 +296,7 @@ vec4 readArgValue(uint stage, uint arg, vec4 current, vec4 temp, vec4 textureVal
             reg = textureVal;
             break;
         case D3DTA_TFACTOR:
-            reg = data.textureFactor;
+            reg = decodeD3DColor(ffps.textureFactor);
             break;
     }
 
@@ -406,13 +353,13 @@ vec4 calculateTextureStage(uint op, vec4 dst, const TextureStageArgumentValues a
             return arg.arg2;
 
         case D3DTOP_MODULATE4X:
-            return arg.arg1 * arg.arg2 * 4.0;
+            return saturate(arg.arg1 * arg.arg2 * 4.0);
 
         case D3DTOP_MODULATE2X:
-            return arg.arg1 * arg.arg2 * 2.0;
+            return saturate(arg.arg1 * arg.arg2 * 2.0);
 
         case D3DTOP_MODULATE:
-            return arg.arg1 * arg.arg2;
+            return saturate(arg.arg1 * arg.arg2);
 
         case D3DTOP_ADDSIGNED2X:
             return saturate(2.0 * (arg.arg1 + (arg.arg2 - vec4(0.5))));
@@ -427,7 +374,7 @@ vec4 calculateTextureStage(uint op, vec4 dst, const TextureStageArgumentValues a
             return saturate(arg.arg1 - arg.arg2);
 
         case D3DTOP_ADDSMOOTH:
-            return fma(complement(arg.arg1), arg.arg2, arg.arg1);
+            return saturate(fma(complement(arg.arg1), arg.arg2, arg.arg1));
 
         case D3DTOP_BLENDDIFFUSEALPHA:
             return mix(arg.arg2, arg.arg1, in_Color0.aaaa);
@@ -436,7 +383,7 @@ vec4 calculateTextureStage(uint op, vec4 dst, const TextureStageArgumentValues a
             return mix(arg.arg2, arg.arg1, textureVal.aaaa);
 
         case D3DTOP_BLENDFACTORALPHA:
-            return mix(arg.arg2, arg.arg1, data.textureFactor.aaaa);
+            return mix(arg.arg2, arg.arg1, decodeD3DColor(ffps.textureFactor).aaaa);
 
         case D3DTOP_BLENDTEXTUREALPHAPM:
             return saturate(fma(arg.arg2, complement(textureVal.aaaa), arg.arg1));
@@ -486,7 +433,7 @@ vec4 calculateTextureStage(uint op, vec4 dst, const TextureStageArgumentValues a
 void alphaTest() {
     uint alphaFunc = specUint(SpecAlphaCompareOp);
     uint alphaPrecision = specUint(SpecAlphaPrecisionBits);
-    uint alphaRefInitial = rs.alphaRef;
+    uint alphaRefInitial = bitfieldExtract(global.packedFogColorAndAlphaRef, 24, 8);
     float alphaRef;
     float alpha = out_Color0.a;
 
@@ -506,7 +453,7 @@ void alphaTest() {
         // Adjust alpha to the given range and round
         float alphaFactor = float((256u << alphaPrecision) - 1u);
 
-        alpha = round(alpha * alphaFactor);
+        alpha = roundEven(alpha * alphaFactor);
     } else {
         alphaRef = float(alphaRefInitial) / 255.0;
     }
@@ -559,67 +506,61 @@ struct TextureStageState {
     vec4 previousStageTextureVal;
 };
 
+vec4 getTexCoord(uint stage) {
+    const uint pointMode = specUint(SpecPointMode);
+
+    // If point sprites are enabled, we need to replace the
+    // input texture coordinate with the point coordinate
+    if (bitfieldExtract(pointMode, 1, 1) == 1u)
+        return vec4(gl_PointCoord, 0.0f, 0.0f);
+
+    switch (stage) {
+        case 0: return in_Texcoord0;
+        case 1: return in_Texcoord1;
+        case 2: return in_Texcoord2;
+        case 3: return in_Texcoord3;
+        case 4: return in_Texcoord4;
+        case 5: return in_Texcoord5;
+        case 6: return in_Texcoord6;
+        case 7: return in_Texcoord7;
+    }
+
+    return vec4(0.0f);
+}
+
 TextureStageState runTextureStage(uint stage, TextureStageState state) {
     if (stage > specUint(SpecFFLastActiveTextureStage)) {
         return state;
     }
 
-    const uint colorOp = specIsOptimized() ? specUint(SpecFFTextureStage0ColorOp + PerTextureStageSpecConsts * stage) : colorOp(stage);
+    const uint colorOp = specUint(SpecFFTextureStage0ColorOp + PerTextureStageSpecConsts * stage);
 
     // This cancels all subsequent stages.
     if (colorOp == D3DTOP_DISABLE)
         return state;
 
-    const bool resultIsTemp = specIsOptimized() ? specBool(SpecFFTextureStage0ResultIsTemp + PerTextureStageSpecConsts * stage) : resultIsTemp(stage);
+    const bool resultIsTemp = specBool(SpecFFTextureStage0ResultIsTemp + PerTextureStageSpecConsts * stage);
     vec4 dst = resultIsTemp ? state.temp : state.current;
 
-    const uint alphaOp = specIsOptimized() ? specUint(SpecFFTextureStage0AlphaOp + PerTextureStageSpecConsts * stage) : alphaOp(stage);
+    const uint alphaOp = specUint(SpecFFTextureStage0AlphaOp + PerTextureStageSpecConsts * stage);
 
     const TextureStageArguments colorArgs = {
         // Color arg0 and alpha arg0 for all stages are packed after all the other FF spec consts
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0ColorArg0 + stage))                             : colorArg0(stage),
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0ColorArg1 + PerTextureStageSpecConsts * stage)) : colorArg1(stage),
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0ColorArg2 + PerTextureStageSpecConsts * stage)) : colorArg2(stage)
+        repackArg(specUint(SpecFFTextureStage0ColorArg0 + stage)),
+        repackArg(specUint(SpecFFTextureStage0ColorArg1 + PerTextureStageSpecConsts * stage)),
+        repackArg(specUint(SpecFFTextureStage0ColorArg2 + PerTextureStageSpecConsts * stage))
     };
     const TextureStageArguments alphaArgs = {
         // Color arg0 and alpha arg0 for all stages are packed after all the other FF spec consts
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0AlphaArg0 + stage))                             : alphaArg0(stage),
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0AlphaArg1 + PerTextureStageSpecConsts * stage)) : alphaArg1(stage),
-        specIsOptimized() ? repackArg(specUint(SpecFFTextureStage0AlphaArg2 + PerTextureStageSpecConsts * stage)) : alphaArg2(stage)
+        repackArg(specUint(SpecFFTextureStage0AlphaArg0 + stage)),
+        repackArg(specUint(SpecFFTextureStage0AlphaArg1 + PerTextureStageSpecConsts * stage)),
+        repackArg(specUint(SpecFFTextureStage0AlphaArg2 + PerTextureStageSpecConsts * stage))
     };
 
-    vec4 textureVal = vec4(0.0);
-    bool usesTexture = (colorArgs.arg0 & D3DTA_SELECTMASK) == D3DTA_TEXTURE
-        || (colorArgs.arg1 & D3DTA_SELECTMASK) == D3DTA_TEXTURE
-        || (colorArgs.arg2 & D3DTA_SELECTMASK) == D3DTA_TEXTURE
-        || (alphaArgs.arg0 & D3DTA_SELECTMASK) == D3DTA_TEXTURE
-        || (alphaArgs.arg1 & D3DTA_SELECTMASK) == D3DTA_TEXTURE
-        || (alphaArgs.arg2 & D3DTA_SELECTMASK) == D3DTA_TEXTURE;
+    vec4 textureVal = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    if (usesTexture) {
-        // We need to replace TEXCOORD inputs with gl_PointCoord
-        // if D3DRS_POINTSPRITEENABLE is set.
-        const uint pointMode = specUint(SpecPointMode);
-        const bool isSprite = bitfieldExtract(pointMode, 1, 1) == 1u;
-
-        vec4 texCoord;
-        if (isSprite) {
-            texCoord = vec4(gl_PointCoord, 0.0, 0.0);
-        } else {
-            switch (stage) {
-                case 0: texCoord = in_Texcoord0; break;
-                case 1: texCoord = in_Texcoord1; break;
-                case 2: texCoord = in_Texcoord2; break;
-                case 3: texCoord = in_Texcoord3; break;
-                case 4: texCoord = in_Texcoord4; break;
-                case 5: texCoord = in_Texcoord5; break;
-                case 6: texCoord = in_Texcoord6; break;
-                case 7: texCoord = in_Texcoord7; break;
-            }
-        }
-        const vec4 unboundTextureConst = vec4(0.0, 0.0, 0.0, 1.0);
-        textureVal = !specBool(SpecSamplerNull, stage) ? sampleTexture(stage, texCoord, state.previousStageTextureVal) : unboundTextureConst;
-    }
+    if (!specBool(SpecSamplerNull, stage))
+        textureVal = sampleTexture(stage, getTexCoord(stage), state.previousStageTextureVal);
 
     // Fast path if alpha/color path is identical.
     // D3DTOP_DOTPRODUCT3 also has special quirky behaviour here.

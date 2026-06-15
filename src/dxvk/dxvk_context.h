@@ -960,9 +960,7 @@ namespace dxvk {
             uint32_t                  offset,
             uint32_t                  size,
       const void*                     data) {
-      uint32_t index = DxvkPushDataBlock::computeIndex(stages);
-
-      uint32_t baseOffset = computePushDataBlockOffset(index);
+      uint32_t baseOffset = DxvkPushDataBlock::computeBlockOffsetForStage(stages);
       std::memcpy(&m_state.pc.constantData[baseOffset + offset], data, size);
 
       m_flags.set(DxvkContextFlag::DirtyPushData);
@@ -1024,16 +1022,20 @@ namespace dxvk {
     /**
      * \brief Uses transfer queue to initialize buffer
      *
-     * Always replaces the entire buffer. Only safe to use
-     * if the buffer is currently not in use by the GPU.
+     * Must only be use if the given buffer region is
+     * not currently in use by the GPU.
      * \param [in] buffer The buffer to initialize
+     * \param [in] bufferOffset Buffer offset
      * \param [in] source Staging buffer containing data
      * \param [in] sourceOffset Offset into staging buffer
+     * \param [in] size Number of bytes to copy
      */
     void uploadBuffer(
       const Rc<DxvkBuffer>&           buffer,
+            VkDeviceSize              bufferOffset,
       const Rc<DxvkBuffer>&           source,
-            VkDeviceSize              sourceOffset);
+            VkDeviceSize              sourceOffset,
+            VkDeviceSize              size);
     
     /**
      * \brief Uses transfer queue to initialize image
@@ -1513,6 +1515,15 @@ namespace dxvk {
       const Rc<DxvkImage>&        srcImage,
             VkImageSubresourceLayers srcSubresource);
 
+    bool copyImageInline(
+            DxvkImage&            dstImage,
+            VkImageSubresourceLayers dstSubresource,
+            VkOffset3D            dstOffset,
+            DxvkImage&            srcImage,
+            VkImageSubresourceLayers srcSubresource,
+            VkOffset3D            srcOffset,
+            VkExtent3D            extent);
+
     template<bool ToBuffer>
     void copySparsePages(
       const Rc<DxvkPagedResource>& sparse,
@@ -1660,6 +1671,8 @@ namespace dxvk {
             VkRenderingAttachmentInfo&  attachment,
             DxvkAccess                  access) const;
 
+    void adjustRenderArea(const VkRect2D& rect);
+
     void beginRenderPass();
     void endRenderPass(bool suspend);
 
@@ -1745,6 +1758,10 @@ namespace dxvk {
       const VkImageSubresourceRange& subresources);
 
     bool isBoundAsRenderTarget(
+      const DxvkImage&              image,
+      const VkImageSubresourceRange& subresources);
+
+    int32_t findColorAttachmentIndex(
       const DxvkImage&              image,
       const VkImageSubresourceRange& subresources);
 
@@ -2259,10 +2276,6 @@ namespace dxvk {
     bool formatsAreImageCopyCompatible(
             VkFormat                  dstFormat,
             VkFormat                  srcFormat);
-
-    static uint32_t computePushDataBlockOffset(uint32_t index) {
-      return index ? MaxSharedPushDataSize + MaxPerStagePushDataSize * (index - 1u) : 0u;
-    }
 
     static VkStencilOpState convertStencilOp(
       const DxvkStencilOp&            op,

@@ -8,22 +8,29 @@ const uint D3DFOG_EXP    = 1;
 const uint D3DFOG_EXP2   = 2;
 const uint D3DFOG_LINEAR = 3;
 
-struct D3D9RenderStateInfo {
-    float fogColor[3];
-    float fogScale;
-    float fogEnd;
-    float fogDensity;
+const uint MaxSharedPushDataSize = 32;
 
-    uint alphaRef;
+struct D3D9VsPushData {
+    uint packedReservedAndPointSize;
+    uint packedPointSizeMinMax;
+};
 
-    float pointSize;
-    float pointSizeMin;
-    float pointSizeMax;
+struct D3D9FfvsPushData {
     float pointScaleA;
     float pointScaleB;
     float pointScaleC;
 };
 
+struct D3D9FfpsPushData {
+    uint textureFactor;
+};
+
+struct D3D9SharedPushData {
+    uint packedFogColorAndAlphaRef;
+    float fogDistanceScale;
+    float fogDistanceEnd;
+    float fogDensity;
+};
 
 // Thanks SPIRV-Cross
 spirv_instruction(set = "GLSL.std.450", id = 79) float spvNMin(float, float);
@@ -35,34 +42,44 @@ spirv_instruction(set = "GLSL.std.450", id = 81) vec2 spvNClamp(vec2, vec2, vec2
 spirv_instruction(set = "GLSL.std.450", id = 81) vec3 spvNClamp(vec3, vec3, vec3);
 spirv_instruction(set = "GLSL.std.450", id = 81) vec4 spvNClamp(vec4, vec4, vec4);
 
+// Bindings have to match D3D9ShaderResourceMapping.
+// Set numbers are arbitrarily set in d3d9_fixed_function.cpp
+#define SAMPLER_SET             0
 
-// Dynamic "spec constants"
-// Binding has to match with getSpecConstantBufferSlot in dxso_util.h
-layout(set = 0, binding = 31, scalar) uniform SpecConsts {
-    uint dynamicSpecConstDword[20];
+#define SRV_SET                 1
+#define SRV_PS_BASE             0
+
+#define CBV_SET                 2
+#define SPEC_DATA_SET           3
+
+#define CBV_VS_CLIP_PLANES      0
+#define CBV_VS_FIXED_FUNCTION   1
+#define CBV_VS_VERTEX_BLEND     2
+
+#define CBV_PS_SHARED           5
+
+layout(set = SPEC_DATA_SET, binding = 0, scalar) uniform SpecConsts {
+    uint specDword0;
+    uint specDword1;
+    uint specDword2;
+    uint specDword3;
+    uint specDword4;
+    uint specDword5;
+    uint specDword6;
+    uint specDword7;
+    uint specDword8;
+    uint specDword9;
+    uint specDword10;
+    uint specDword11;
+    uint specDword12;
+    uint specDword13;
+    uint specDword14;
+    uint specDword15;
+    uint specDword16;
+    uint specDword17;
+    uint specDword18;
+    uint specDword19;
 };
-
-layout (constant_id = 0) const uint SpecConstDword0 = 0;
-layout (constant_id = 1) const uint SpecConstDword1 = 0;
-layout (constant_id = 2) const uint SpecConstDword2 = 0;
-layout (constant_id = 3) const uint SpecConstDword3 = 0;
-layout (constant_id = 4) const uint SpecConstDword4 = 0;
-layout (constant_id = 5) const uint SpecConstDword5 = 0;
-layout (constant_id = 6) const uint SpecConstDword6 = 0;
-layout (constant_id = 7) const uint SpecConstDword7 = 0;
-layout (constant_id = 8) const uint SpecConstDword8 = 0;
-layout (constant_id = 9) const uint SpecConstDword9 = 0;
-layout (constant_id = 10) const uint SpecConstDword10 = 0;
-layout (constant_id = 11) const uint SpecConstDword11 = 0;
-layout (constant_id = 12) const uint SpecConstDword12 = 0;
-layout (constant_id = 13) const uint SpecConstDword13 = 0;
-layout (constant_id = 14) const uint SpecConstDword14 = 0;
-layout (constant_id = 15) const uint SpecConstDword15 = 0;
-layout (constant_id = 16) const uint SpecConstDword16 = 0;
-layout (constant_id = 17) const uint SpecConstDword17 = 0;
-layout (constant_id = 18) const uint SpecConstDword18 = 0;
-layout (constant_id = 19) const uint SpecConstDword19 = 0;
-layout (constant_id = 20) const uint SpecConstDword20 = 0;
 
 const uint SpecSamplerType = 0;
 const uint SpecSamplerDepthMode = 1;
@@ -187,7 +204,7 @@ BitfieldPosition SpecConstLayout[SpecConstantCount] = {
     { 5, 24, 2 },  // PointMode
     { 5, 26, 5 },  // DrefScaling
 
-    { 6, 31, 1 },  // FFGlobalSpecularEnabled.
+    { 6, 31, 1 },  // FFGlobalSpecularEnabled
 
     { 6,  0, 5 },  // FFTextureStage0ColorOp
     { 6,  5, 5 },  // FFTextureStage0ColorArg1
@@ -273,60 +290,29 @@ BitfieldPosition SpecConstLayout[SpecConstantCount] = {
     { 16, 15, 5 },  // FFTextureStage7AlphaArg0
 };
 
-bool specIsOptimized() {
-    return SpecConstDword20 != 0u;
-}
-
 uint specDword(uint index) {
-    if (!specIsOptimized()) {
-        return dynamicSpecConstDword[index];
-    }
-
     switch (index) {
-        case 0u:
-            return SpecConstDword0;
-        case 1u:
-            return SpecConstDword1;
-        case 2u:
-            return SpecConstDword2;
-        case 3u:
-            return SpecConstDword3;
-        case 4u:
-            return SpecConstDword4;
-        case 5u:
-            return SpecConstDword5;
-        case 6u:
-            return SpecConstDword6;
-        case 7u:
-            return SpecConstDword7;
-        case 8u:
-            return SpecConstDword8;
-        case 9u:
-            return SpecConstDword9;
-        case 10u:
-            return SpecConstDword10;
-        case 11u:
-            return SpecConstDword11;
-        case 12u:
-            return SpecConstDword12;
-        case 13u:
-            return SpecConstDword13;
-        case 14u:
-            return SpecConstDword14;
-        case 15u:
-            return SpecConstDword15;
-        case 16u:
-            return SpecConstDword16;
-        case 17u:
-            return SpecConstDword17;
-        case 18u:
-            return SpecConstDword18;
-        case 19u:
-            return SpecConstDword19;
-        case 20u:
-            return SpecConstDword20;
-        default:
-            return 0u;
+        case 0u: return specDword0;
+        case 1u: return specDword1;
+        case 2u: return specDword2;
+        case 3u: return specDword3;
+        case 4u: return specDword4;
+        case 5u: return specDword5;
+        case 6u: return specDword6;
+        case 7u: return specDword7;
+        case 8u: return specDword8;
+        case 9u: return specDword9;
+        case 10u: return specDword10;
+        case 11u: return specDword11;
+        case 12u: return specDword12;
+        case 13u: return specDword13;
+        case 14u: return specDword14;
+        case 15u: return specDword15;
+        case 16u: return specDword16;
+        case 17u: return specDword17;
+        case 18u: return specDword18;
+        case 19u: return specDword19;
+        default: return 0u;
     }
 }
 
@@ -348,4 +334,8 @@ bool specBool(uint specConstIdx, uint bitOffset) {
 
 bool specBool(uint specConstIdx) {
     return specUint(specConstIdx) != 0u;
+}
+
+vec4 decodeD3DColor(uint color) {
+    return unpackUnorm4x8(color).bgra;
 }
