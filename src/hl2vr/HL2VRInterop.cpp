@@ -143,11 +143,10 @@ void HL2VRInterop::PreSubmitCallback()
 void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextureData_t &data)
 {
 	D3D9Surface* rt = static_cast<D3D9Surface*>(surface);
-	D3DSURFACE_DESC desc;
-	rt->GetDesc(&desc);
 
-	data.m_nHeight = desc.Height;
-	data.m_nWidth = desc.Width;
+	const auto& info = rt->GetCommonTexture()->GetImage()->info();
+	data.m_nHeight = info.extent.height;
+	data.m_nWidth = info.extent.width;
 	// VkPhysicalDevice
 	auto dxvkDevice = m_device->GetDXVKDevice();
 	data.m_pPhysicalDevice = dxvkDevice->adapter()->handle();
@@ -160,8 +159,8 @@ void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextu
 	// VkQueue
 	data.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
 	data.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
-	data.m_nFormat = VK_FORMAT_B8G8R8A8_UNORM;
-	data.m_nSampleCount = std::max(1, m_msaa);
+	data.m_nFormat = info.format;
+	data.m_nSampleCount = info.sampleCount;
 }
 
 void HL2VRInterop::PrePresentCallBack()
@@ -173,7 +172,7 @@ void HL2VRInterop::PrePresentCallBack()
 	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited)
 		return;
 
-	if (m_vrCompositor->CanRenderScene()) {
+	if (m_vrCompositor->CanRenderScene() && m_colorTex) {
 		static vr::VRTextureBounds_t leftBounds = {0.0f, 0.0f, 0.5f, 1.0f};
 		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
