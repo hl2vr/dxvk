@@ -122,7 +122,7 @@ namespace dxvk {
   
   
   std::string Logger::getFileName(const std::string& base) {
-    std::string path = env::getEnvVar("DXVK_LOG_PATH");
+    std::string path;// = env::getEnvVar("DXVK_LOG_PATH");
     
     if (path == "none")
       return std::string();
@@ -152,12 +152,12 @@ namespace dxvk {
       { "none",  LogLevel::None  },
     }};
     
-    const std::string logLevelStr = env::getEnvVar("DXVK_LOG_LEVEL");
+    /*const std::string logLevelStr = env::getEnvVar("DXVK_LOG_LEVEL");
     
     for (const auto& pair : logLevels) {
       if (logLevelStr == pair.first)
         return pair.second;
-    }
+    }*/
     
     return LogLevel::Info;
   }

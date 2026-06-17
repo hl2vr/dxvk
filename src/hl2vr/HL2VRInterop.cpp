@@ -40,6 +40,8 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 	m_renderWidth = width;
 	m_renderHeight = height;
 	m_msaa = msaa;
+	if (msaa <= 1)
+		m_msaa = 0;
 }
 
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
@@ -94,7 +96,6 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	if (!m_initialized)
 		return;
 
-	std::unique_lock lock(m_frameSyncMutex);
 	m_device = device;
 	if (!m_initialized || !m_frameAwaited)
 		return;
@@ -130,10 +131,6 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 
 void HL2VRInterop::PreSubmitCallback()
 {
-	if (!m_initialized || !m_frameAwaited || m_timingInfoSubmitted)
-		return;
-
-	std::unique_lock lock(m_frameSyncMutex);
 	if (m_initialized && m_frameAwaited && !m_timingInfoSubmitted) {
 		m_vrCompositor->SubmitExplicitTimingData();
 		m_timingInfoSubmitted = true;
@@ -168,11 +165,7 @@ void HL2VRInterop::PrePresentCallBack()
 	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || !m_colorTex)
 		return;
 
-	std::unique_lock lock(m_frameSyncMutex);
-	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited)
-		return;
-
-	if (m_vrCompositor->CanRenderScene() && m_colorTex) {
+	if (m_vrCompositor->CanRenderScene()) {
 		static vr::VRTextureBounds_t leftBounds = {0.0f, 0.0f, 0.5f, 1.0f};
 		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
@@ -207,11 +200,9 @@ void HL2VRInterop::PostPresentCallback()
 	if (!m_initialized || !m_frameAwaited)
 		return;
 
-	std::unique_lock lock(m_frameSyncMutex);
-	if (!m_initialized || !m_frameAwaited)
-		return;
-
 	m_vrCompositor->PostPresentHandoff();
+
+	std::unique_lock lock(m_frameSyncMutex);
 	m_timingInfoSubmitted = false;
 	m_frameAwaited = false;
 	m_condFramePresented.notify_one();
