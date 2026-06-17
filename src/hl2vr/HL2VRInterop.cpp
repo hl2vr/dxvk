@@ -82,9 +82,6 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 
 void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
 {
-	if (!m_initialized)
-		return;
-
 	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight)
 	{
 		desc.MultiSample = static_cast<D3DMULTISAMPLE_TYPE>(m_msaa);

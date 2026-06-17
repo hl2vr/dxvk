@@ -4545,11 +4545,12 @@ namespace dxvk {
     desc.Format             = EnumerateFormat(Format);
     desc.Pool               = D3DPOOL_DEFAULT;
     desc.Discard            = Discard;
-    desc.MultiSample        = std::max(MultiSample, (D3DMULTISAMPLE_TYPE)OpenVRDirectMode::Get()->DetermineMSAA(Width, Height));
+    desc.MultiSample        = MultiSample;
     desc.MultisampleQuality = MultisampleQuality;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = TRUE;
     desc.IsLockable         = IsLockableDepthStencilFormat(desc.Format);
+  	g_hl2vr->ModifyTextureCreationDetails(desc);
 
     HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc);
     if (FAILED(hr))
@@ -7584,10 +7585,11 @@ namespace dxvk {
       region.dstSubresource = region.srcSubresource;
       region.dstOffset = {0, 0, 0};
       region.extent = image->info().extent;
+      bool isDepth = commonTex->Desc()->Usage & D3DUSAGE_DEPTHSTENCIL;
 
       EmitCs([cDstImage = commonTex->GetResolveImage(), cSrcImage = image,
-                     cRegion = region](DxvkContext *ctx) {
-		ctx->resolveImage(cDstImage, cSrcImage, cRegion, VK_FORMAT_UNDEFINED, VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_AVERAGE_BIT);
+                     cRegion = region, cIsDepth = isDepth](DxvkContext *ctx) {
+		ctx->resolveImage(cDstImage, cSrcImage, cRegion, cSrcImage->info().format, cIsDepth ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
       });
       imageView = commonTex->GetResolveView(srgb);
     }

@@ -7325,7 +7325,8 @@ namespace dxvk {
         msSampleCount = rsSampleCount ? rsSampleCount : VK_SAMPLE_COUNT_1_BIT;
 
       bool center = m_state.gp.state.useSampleLocations();
-      bool enable = m_device->canUseSampleLocations(msSampleCount);
+      // don't use this feature, with our hack it's defaulting to center location samples, effectively disabling the MSAA effect
+      bool enable = false; //m_device->canUseSampleLocations(msSampleCount);
 
       if (enable && m_state.om.renderTargets.depth.view) {
         auto flags = m_state.om.renderTargets.depth.view->image()->info().flags;
