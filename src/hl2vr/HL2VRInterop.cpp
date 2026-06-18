@@ -11,12 +11,14 @@ HL2VRInterop* g_hl2vr = &g_HL2VRInterop;
 VkSubmitThreadCallback *g_pVkSubmitThreadCallback = &g_HL2VRInterop;
 
 
-void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor)
+void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor, vr::IVROverlay *vrOverlay, vr::VROverlayHandle_t overlayHandle)
 {
 	std::unique_lock lock(m_frameSyncMutex);
 	m_vrSystem = vrSystem;
 	m_vrCompositor = vrCompositor;
 	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
+	m_vrOverlay = vrOverlay;
+	m_overlayHandle = overlayHandle;
 
 	m_initialized = true;
 }
@@ -28,11 +30,17 @@ void HL2VRInterop::Shutdown()
 
 	m_vrSystem = nullptr;
 	m_vrCompositor = nullptr;
+	m_vrOverlay = nullptr;
 
 	m_colorTex = nullptr;
 	m_depthTex = nullptr;
 	m_vrsImage = nullptr;
 	m_device = nullptr;
+}
+
+void HL2VRInterop::SetLoadingScreenMode(bool enable)
+{
+	m_loadingScreenModeEnabled = enable;
 }
 
 void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa)
@@ -47,7 +55,7 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
 {
 	std::unique_lock lock(m_frameSyncMutex);
-	if (!m_initialized)
+	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
 
 	if (!m_device)
@@ -94,6 +102,25 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 		return;
 
 	m_device = device;
+
+	if (m_loadingScreenModeEnabled)
+	{
+		Com<IDirect3DSurface9> renderTarget;
+		device->GetRenderTarget(0, &renderTarget);
+		if (renderTarget && m_vrOverlay && m_overlayHandle)
+		{
+			vr::VRVulkanTextureData_t vulkanTextureData;
+			FillTextureData(renderTarget.ptr(), vulkanTextureData);
+			vr::Texture_t textureData;
+			textureData.eType = vr::TextureType_Vulkan;
+			textureData.eColorSpace = vr::ColorSpace_Auto;
+			textureData.handle = (void*)&vulkanTextureData;
+
+			m_vrOverlay->SetOverlayTexture(m_overlayHandle, &textureData);
+		}
+		return;
+	}
+
 	if (!m_initialized || !m_frameAwaited)
 		return;
 
@@ -213,7 +240,7 @@ void HL2VRInterop::PostPresentCallback()
 
 void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 {
-	if (!m_initialized || rt == nullptr)
+	if (!m_initialized || m_loadingScreenModeEnabled || rt == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;
@@ -228,7 +255,7 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 
 void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 {
-	if (!m_initialized || depth == nullptr)
+	if (!m_initialized || m_loadingScreenModeEnabled || depth == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;

@@ -3,9 +3,11 @@
 
 namespace vr
 {
-struct HmdMatrix34_t;
-class IVRSystem;
+	struct HmdMatrix34_t;
+	class IVRSystem;
 	class IVRCompositor;
+	class IVROverlay;
+	typedef uint64_t VROverlayHandle_t;
 }
 
 class IHL2VRInterop
@@ -13,8 +15,10 @@ class IHL2VRInterop
 public:
     virtual ~IHL2VRInterop() = default;
 
-    virtual void Init(vr::IVRSystem* vrSystem, vr::IVRCompositor* vrCompositor) = 0;
+    virtual void Init(vr::IVRSystem* vrSystem, vr::IVRCompositor* vrCompositor, vr::IVROverlay* vrOverlay, vr::VROverlayHandle_t loadingScreenOverlay) = 0;
     virtual void Shutdown() = 0;
+
+	virtual void SetLoadingScreenMode(bool enable) = 0;
 
     virtual void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) = 0;
 

@@ -13,8 +13,10 @@ namespace dxvk
 class HL2VRInterop : public IHL2VRInterop, public VkSubmitThreadCallback
 {
 public:
-	void Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor) override;
+	void Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor, vr::IVROverlay *vrOverlay, vr::VROverlayHandle_t overlayHandle) override;
 	void Shutdown() override;
+
+	void SetLoadingScreenMode(bool enable) override;
 
 	void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) override;
 
@@ -46,6 +48,9 @@ private:
 
 	vr::IVRSystem* m_vrSystem = nullptr;
 	vr::IVRCompositor* m_vrCompositor = nullptr;
+	vr::IVROverlay* m_vrOverlay = nullptr;
+	vr::VROverlayHandle_t m_overlayHandle = 0;
+	std::atomic<bool> m_loadingScreenModeEnabled = false;
 
 	Com<D3D9DeviceEx> m_device;
 	Com<IDirect3DSurface9> m_colorTex;
