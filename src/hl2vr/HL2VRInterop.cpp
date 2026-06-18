@@ -155,6 +155,12 @@ void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextu
 	data.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
 	data.m_nFormat = info.format;
 	data.m_nSampleCount = info.sampleCount;
+	/*if (data.m_nSampleCount > 1 && !(rt->GetCommonTexture()->Desc()->Usage & D3DUSAGE_DEPTHSTENCIL))
+	{
+		// submit the resolved nun-multisampled image, instead, as submitting the MSAA version seems prone to cause issues
+		data.m_nImage = (uint64_t)rt->GetCommonTexture()->GetResolveImage()->handle();
+		data.m_nSampleCount = 1;
+	}*/
 }
 
 void HL2VRInterop::PrePresentCallBack()

@@ -7575,7 +7575,7 @@ namespace dxvk {
 
     // Can only bind a non-multisampled texture; otherwise we need to resolve
     auto image = commonTex->GetImage();
-    bool needsResolve = image != nullptr && image->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
+    bool needsResolve = false; //image != nullptr && image->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
     if (needsResolve) {
       const DxvkFormatInfo* formatInfo = lookupFormatInfo(image->info().format);
       const VkImageSubresource subresource = commonTex->GetSubresourceFromIndex(formatInfo->aspectMask, 0);
