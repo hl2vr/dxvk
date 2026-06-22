@@ -126,26 +126,10 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 
 	// transition our render textures to proper image layout before submitting to OpenVR
 	if (m_colorTex != nullptr) {
-		auto *colorTexCommon = static_cast<D3D9Surface*>(m_colorTex.ptr())->GetCommonTexture();
-		VkImageSubresourceRange subresources = {
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, colorTexCommon->GetImage()->info().mipLevels,
-			0, colorTexCommon->GetImage()->info().numLayers
-		  };
-		device->TransformImage(colorTexCommon, &subresources,
-		  colorTexCommon->GetImage()->info().layout,
-		  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		ResolveAndTransitionTexture(m_colorTex.ptr(), false);
 	}
 	if (m_depthTex != nullptr) {
-		auto *depthTexCommon = static_cast<D3D9Surface*>(m_depthTex.ptr())->GetCommonTexture();
-		VkImageSubresourceRange subresources = {
-			VK_IMAGE_ASPECT_DEPTH_BIT,
-			0, depthTexCommon->GetImage()->info().mipLevels,
-			0, depthTexCommon->GetImage()->info().numLayers
-		  };
-		device->TransformImage(depthTexCommon, &subresources,
-		  depthTexCommon->GetImage()->info().layout,
-		  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		ResolveAndTransitionTexture(m_depthTex.ptr(), true);
 	}
 }
 
@@ -181,13 +165,11 @@ void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextu
 	data.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
 	data.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
 	data.m_nFormat = info.format;
-	data.m_nSampleCount = info.sampleCount;
-	/*if (data.m_nSampleCount > 1 && !(rt->GetCommonTexture()->Desc()->Usage & D3DUSAGE_DEPTHSTENCIL))
+	data.m_nSampleCount = 1;
+	if (info.sampleCount > 1)
 	{
-		// submit the resolved nun-multisampled image, instead, as submitting the MSAA version seems prone to cause issues
 		data.m_nImage = (uint64_t)rt->GetCommonTexture()->GetResolveImage()->handle();
-		data.m_nSampleCount = 1;
-	}*/
+	}
 }
 
 void HL2VRInterop::PrePresentCallBack()
@@ -407,4 +389,41 @@ void HL2VRInterop::UpdateFoveationTexture()
 	}
 }
 
+void HL2VRInterop::ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth)
+{
+	auto *commonTex = static_cast<D3D9Surface*>(texture)->GetCommonTexture();
+	VkImageAspectFlags aspect = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	VkImageSubresourceRange subresources = {
+		aspect,
+		0, commonTex->GetImage()->info().mipLevels,
+		0, commonTex->GetImage()->info().numLayers
+	  };
+	VkImageSubresourceLayers subresLayers = {
+		aspect,
+		0,
+		0,
+		commonTex->GetImage()->info().numLayers
+	};
+	bool isMultisampled = commonTex->GetImage()->info().sampleCount > 1;
+	auto image = commonTex->GetImage();
+	auto resolveImage = isMultisampled ? commonTex->GetResolveImage() : image;
+	auto resolveMode = isDepth ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+	m_device->EmitCs([image, resolveImage, subresources, subresLayers, resolveMode](DxvkContext* ctx)
+	{
+		if (image != resolveImage)
+		{
+			VkFormat format = image->info().format;
+
+			VkImageResolve region;
+			region.srcSubresource = subresLayers;
+			region.srcOffset      = VkOffset3D { 0, 0, 0 };
+			region.dstSubresource = subresLayers;
+			region.dstOffset      = VkOffset3D { 0, 0, 0 };
+			region.extent         = image->mipLevelExtent(subresLayers.mipLevel);
+			ctx->resolveImage(resolveImage, image, region, format, resolveMode, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
+		}
+
+		ctx->transformImage(resolveImage, subresources, resolveImage->queryLayout(subresources), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	});
+}
 }
