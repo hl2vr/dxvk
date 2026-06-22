@@ -670,6 +670,9 @@ namespace dxvk {
     if (unlikely(ppTexture == nullptr))
       return D3DERR_INVALIDCALL;
 
+    if ((Usage & D3DUSAGE_VRS) && Format != D3DFMT_A8)
+      return D3DERR_INVALIDCALL;
+
     D3D9_COMMON_TEXTURE_DESC desc;
     desc.Width              = Width;
     desc.Height             = Height;
@@ -7572,27 +7575,6 @@ namespace dxvk {
       GetCommonTexture(m_state.textures[StateSampler]);
 
     Rc<DxvkImageView> imageView = commonTex->GetSampleView(srgb);
-
-    // Can only bind a non-multisampled texture; otherwise we need to resolve
-    auto image = commonTex->GetImage();
-    bool needsResolve = false; //image != nullptr && image->info().sampleCount != VK_SAMPLE_COUNT_1_BIT;
-    if (needsResolve) {
-      const DxvkFormatInfo* formatInfo = lookupFormatInfo(image->info().format);
-      const VkImageSubresource subresource = commonTex->GetSubresourceFromIndex(formatInfo->aspectMask, 0);
-      VkImageResolve region;
-      region.srcSubresource = {subresource.aspectMask, subresource.mipLevel, subresource.arrayLayer, 1};
-      region.srcOffset = {0, 0, 0};
-      region.dstSubresource = region.srcSubresource;
-      region.dstOffset = {0, 0, 0};
-      region.extent = image->info().extent;
-      bool isDepth = commonTex->Desc()->Usage & D3DUSAGE_DEPTHSTENCIL;
-
-      EmitCs([cDstImage = commonTex->GetResolveImage(), cSrcImage = image,
-                     cRegion = region, cIsDepth = isDepth](DxvkContext *ctx) {
-		ctx->resolveImage(cDstImage, cSrcImage, cRegion, cSrcImage->info().format, cIsDepth ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
-      });
-      imageView = commonTex->GetResolveView(srgb);
-    }
 
     EmitCs([
       cSlot = slot,

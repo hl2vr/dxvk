@@ -42,6 +42,7 @@ private:
 	void UpdateFoveationMode(bool shouldEnable);
 	void UpdateFoveationTexture();
 
+	void ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth);
 	void FillTextureData(IDirect3DSurface9* surface, vr::VRVulkanTextureData_t& data);
 
 	std::atomic<bool> m_initialized = false;
