@@ -29,7 +29,6 @@
 
 #include "VkSubmitThreadCallback.h"
 #include "../hl2vr/HL2VRInterop.h"
-#include "../hl2vr/OpenVRDirectMode.h"
 
 #include <algorithm>
 #include <cfloat>

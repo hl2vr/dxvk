@@ -6961,7 +6961,7 @@ namespace dxvk {
           bool                    flushClears) {
     // Images that can't be used as attachments are always in their
     // default layout, so we don't have to do anything in this case
-    if (!(image->info().usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+    if (!(image->info().usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)))
       return;
 
     // Flush clears if there are any that affect the image. We need

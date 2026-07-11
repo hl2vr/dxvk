@@ -58,7 +58,7 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
 
-	if (!m_device)
+	if (m_device == nullptr)
 		return;
 
 	if (m_frameAwaited)
@@ -107,7 +107,7 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	{
 		Com<IDirect3DSurface9> renderTarget;
 		device->GetRenderTarget(0, &renderTarget);
-		if (renderTarget && m_vrOverlay && m_overlayHandle)
+		if (renderTarget != nullptr && m_vrOverlay && m_overlayHandle)
 		{
 			vr::VRVulkanTextureData_t vulkanTextureData;
 			FillTextureData(renderTarget.ptr(), vulkanTextureData);
@@ -174,7 +174,7 @@ void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextu
 
 void HL2VRInterop::PrePresentCallBack()
 {
-	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || !m_colorTex)
+	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || m_colorTex == nullptr)
 		return;
 
 	if (m_vrCompositor->CanRenderScene()) {
@@ -227,7 +227,7 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 
 	D3DSURFACE_DESC desc;
 	rt->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && !m_colorTex)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_colorTex == nullptr)
 	{
 		m_colorTex = rt;
 	}
@@ -242,7 +242,7 @@ void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 
 	D3DSURFACE_DESC desc;
 	depth->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && !m_depthTex)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_depthTex == nullptr)
 	{
 		m_depthTex = depth;
 	}
@@ -288,7 +288,7 @@ void HL2VRInterop::SetZRange(float nearZ, float farZ)
 
 void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
 {
-	if (!m_initialized || !m_FoveatedRenderingEnabled || !m_device)
+	if (!m_initialized || !m_FoveatedRenderingEnabled || m_device == nullptr)
 		return;
 
 	if (shouldEnable)
@@ -299,7 +299,7 @@ void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
 
 void HL2VRInterop::UpdateFoveationTexture()
 {
-	if (!m_device)
+	if (m_device == nullptr)
 		return;
 
 	auto* vrsInterface = &m_device->m_d3d9VRS;
@@ -318,7 +318,7 @@ void HL2VRInterop::UpdateFoveationTexture()
 			UINT desiredVrsImageWidth = (m_renderWidth + desiredTexelSize.width - 1) / desiredTexelSize.width;
 			UINT desiredVrsImageHeight = (m_renderHeight + desiredTexelSize.height - 1) / desiredTexelSize.height;
 
-			if (!m_vrsImage || desiredVrsImageWidth != m_vrsImageWidth || desiredVrsImageHeight != m_vrsImageHeight)
+			if (m_vrsImage == nullptr || desiredVrsImageWidth != m_vrsImageWidth || desiredVrsImageHeight != m_vrsImageHeight)
 			{
 				m_vrsImageWidth = desiredVrsImageWidth;
 				m_vrsImageHeight = desiredVrsImageHeight;
@@ -331,7 +331,7 @@ void HL2VRInterop::UpdateFoveationTexture()
 				}
 			}
 
-			if (!m_vrsImage)
+			if (m_vrsImage == nullptr)
 				return;
 
 			D3DLOCKED_RECT lockedRect;
@@ -423,7 +423,7 @@ void HL2VRInterop::ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool 
 			ctx->resolveImage(resolveImage, image, region, format, resolveMode, VK_RESOLVE_MODE_SAMPLE_ZERO_BIT);
 		}
 
-		ctx->transformImage(resolveImage, subresources, resolveImage->queryLayout(subresources), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		ctx->transformImage(resolveImage, subresources, resolveImage->info().layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	});
 }
 }
