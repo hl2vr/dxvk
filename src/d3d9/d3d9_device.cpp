@@ -27,7 +27,6 @@
 
 #include "d3d9_initializer.h"
 
-#include "VkSubmitThreadCallback.h"
 #include "../hl2vr/HL2VRInterop.h"
 
 #include <algorithm>

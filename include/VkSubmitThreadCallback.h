@@ -1,8 +1,0 @@
-#pragma once
-
-class VkSubmitThreadCallback {
-public:
-  virtual void PreSubmitCallback() = 0;
-	virtual void PrePresentCallBack() = 0;
-	virtual void PostPresentCallback() = 0;
-};

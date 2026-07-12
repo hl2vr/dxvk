@@ -574,6 +574,8 @@ namespace dxvk {
     void presentImage(
       const Rc<Presenter>&            presenter,
       const Rc<DxvkLatencyTracker>&   tracker,
+      const Rc<DxvkImage>&            vrColorImage,
+      const Rc<DxvkImage>&            vrDepthImage,
             uint64_t                  frameId,
             DxvkSubmitStatus*         status);
     

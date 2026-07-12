@@ -4,6 +4,7 @@
 
 #include "d3d9_hud.h"
 #include "d3d9_window.h"
+#include "../hl2vr/HL2VRInterop.h"
 
 namespace dxvk {
 
@@ -877,6 +878,9 @@ namespace dxvk {
       viewInfo.layerIndex = 0u;
       viewInfo.layerCount = 1u;
 
+      Rc<DxvkImage> vrColorImage, vrDepthImage;
+      g_hl2vr->GetVRSubmissionImages(vrColorImage, vrDepthImage);
+
       m_parent->EmitCs([
         cDevice         = m_device,
         cPresenter      = m_wctx->presenter,
@@ -886,6 +890,8 @@ namespace dxvk {
         cSrcRect        = srcRect,
         cDstView        = backBuffer->createView(viewInfo),
         cDstRect        = dstRect,
+        cVRColorImage   = vrColorImage,
+        cVRDepthImage   = vrDepthImage,
         cSync           = sync,
         cFrameId        = m_wctx->frameId,
         cLatency        = m_latencyTracker
@@ -908,7 +914,7 @@ namespace dxvk {
         ctx->synchronizeWsi(cSync);
         ctx->flushCommandList(nullptr, nullptr);
 
-        cDevice->presentImage(cPresenter, cLatency, cFrameId, nullptr);
+        cDevice->presentImage(cPresenter, cLatency, cVRColorImage, cVRDepthImage, cFrameId, nullptr);
       });
 
       m_parent->FlushCsChunk();

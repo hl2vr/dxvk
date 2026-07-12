@@ -1,7 +1,7 @@
 #include "dxvk_device.h"
 #include "dxvk_queue.h"
 
-#include "VkSubmitThreadCallback.h"
+#include "../hl2vr/VkSubmitThreadCallback.h"
 
 
 namespace dxvk {
@@ -161,7 +161,7 @@ namespace dxvk {
 
         if (g_pVkSubmitThreadCallback != nullptr)
         {
-			g_pVkSubmitThreadCallback->PreSubmitCallback();
+          g_pVkSubmitThreadCallback->PreSubmitCallback();
         }
 
         if (entry.submit.cmdList != nullptr) {
@@ -179,7 +179,7 @@ namespace dxvk {
         } else if (entry.present.presenter != nullptr) {
           if (g_pVkSubmitThreadCallback != nullptr)
           {
-            g_pVkSubmitThreadCallback->PrePresentCallBack();
+            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage);
           }
 
           if (entry.latency.tracker)

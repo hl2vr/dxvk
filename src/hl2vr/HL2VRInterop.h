@@ -3,7 +3,7 @@
 #include "IHL2VRInterop.h"
 #include "openvr/openvr.hpp"
 
-#include <VkSubmitThreadCallback.h>
+#include "VkSubmitThreadCallback.h"
 #include <d3d9.h>
 #include <d3d9_device.h>
 
@@ -24,9 +24,10 @@ public:
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
 	void OnPrePresent(D3D9DeviceEx* device);
+	void GetVRSubmissionImages(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage);
 	void OnPostPresent(D3D9DeviceEx* device);
 	void PreSubmitCallback() override;
-	void PrePresentCallBack() override;
+	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage) override;
 	void PostPresentCallback() override;
 	void OnSetRenderTarget(IDirect3DSurface9 *rt);
 	void OnSetDepthStencil(IDirect3DSurface9 *depth);
@@ -43,7 +44,7 @@ private:
 	void UpdateFoveationTexture();
 
 	void ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth);
-	void FillTextureData(IDirect3DSurface9* surface, vr::VRVulkanTextureData_t& data);
+	void FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t& data);
 
 	std::atomic<bool> m_initialized = false;
 

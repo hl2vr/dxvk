@@ -44,6 +44,8 @@ namespace dxvk {
    */
   struct DxvkPresentInfo {
     Rc<Presenter>       presenter;
+    Rc<DxvkImage>       vrColorImage;
+    Rc<DxvkImage>       vrDepthImage;
     uint64_t            frameId;
   };
 

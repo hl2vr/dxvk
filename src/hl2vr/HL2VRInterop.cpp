@@ -110,7 +110,7 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 		if (renderTarget != nullptr && m_vrOverlay && m_overlayHandle)
 		{
 			vr::VRVulkanTextureData_t vulkanTextureData;
-			FillTextureData(renderTarget.ptr(), vulkanTextureData);
+			FillTextureData(static_cast<D3D9Surface*>(renderTarget.ptr())->GetCommonTexture()->GetImage(), vulkanTextureData);
 			vr::Texture_t textureData;
 			textureData.eType = vr::TextureType_Vulkan;
 			textureData.eColorSpace = vr::ColorSpace_Auto;
@@ -133,6 +133,28 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	}
 }
 
+void HL2VRInterop::GetVRSubmissionImages(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage)
+{
+	vrColorImage = nullptr;
+	vrDepthImage = nullptr;
+
+	if (m_colorTex != nullptr)
+	{
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_colorTex.ptr());
+		vrColorImage = rt->GetCommonTexture()->GetImage();
+		if (vrColorImage->info().sampleCount > 1)
+			vrColorImage = rt->GetCommonTexture()->GetResolveImage();
+	}
+
+	if (m_depthTex != nullptr)
+	{
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_depthTex.ptr());
+		vrDepthImage = rt->GetCommonTexture()->GetImage();
+		if (vrDepthImage->info().sampleCount > 1)
+			vrDepthImage = rt->GetCommonTexture()->GetResolveImage();
+	}
+}
+
 void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 {
 }
@@ -145,11 +167,9 @@ void HL2VRInterop::PreSubmitCallback()
 	}
 }
 
-void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextureData_t &data)
+void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t &data)
 {
-	D3D9Surface* rt = static_cast<D3D9Surface*>(surface);
-
-	const auto& info = rt->GetCommonTexture()->GetImage()->info();
+	const auto& info = image->info();
 	data.m_nHeight = info.extent.height;
 	data.m_nWidth = info.extent.width;
 	// VkPhysicalDevice
@@ -158,23 +178,19 @@ void HL2VRInterop::FillTextureData(IDirect3DSurface9 *surface, vr::VRVulkanTextu
 	// VkDevice
 	data.m_pDevice = dxvkDevice->handle();
 	// VkImage
-	data.m_nImage = (uint64_t)rt->GetCommonTexture()->GetImage()->handle();
+	data.m_nImage = (uint64_t)image->handle();
 	// VkInstance
 	data.m_pInstance = dxvkDevice->instance()->vki()->instance();
 	// VkQueue
 	data.m_pQueue = dxvkDevice->queues().graphics.queueHandle;
 	data.m_nQueueFamilyIndex = dxvkDevice->queues().graphics.queueFamily;
 	data.m_nFormat = info.format;
-	data.m_nSampleCount = 1;
-	if (info.sampleCount > 1)
-	{
-		data.m_nImage = (uint64_t)rt->GetCommonTexture()->GetResolveImage()->handle();
-	}
+	data.m_nSampleCount = info.sampleCount;
 }
 
-void HL2VRInterop::PrePresentCallBack()
+void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage)
 {
-	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || m_colorTex == nullptr)
+	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || vrColorImage == nullptr)
 		return;
 
 	if (m_vrCompositor->CanRenderScene()) {
@@ -182,7 +198,7 @@ void HL2VRInterop::PrePresentCallBack()
 		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
 		vr::VRVulkanTextureData_t colorTexData, depthTexData;
-		FillTextureData(m_colorTex.ptr(), colorTexData);
+		FillTextureData(vrColorImage, colorTexData);
 		vr::VRTextureWithPoseAndDepth_t submitInfo;
 		submitInfo.eType = vr::TextureType_Vulkan;
 		submitInfo.eColorSpace = vr::ColorSpace_Auto;
@@ -190,15 +206,16 @@ void HL2VRInterop::PrePresentCallBack()
 		submitInfo.mDeviceToAbsoluteTracking = m_headsetPose;
 
 		int flags = vr::Submit_TextureWithPose;
-		if (m_depthTex != nullptr)
+		if (vrDepthImage != nullptr)
 		{
 			flags |= vr::Submit_TextureWithDepth;
-			FillTextureData(m_depthTex.ptr(), depthTexData);
+			FillTextureData(vrDepthImage, depthTexData);
 			submitInfo.depth.handle = (void*)&depthTexData;
 			submitInfo.depth.mProjection = m_projectionLeft;
 			submitInfo.depth.vRange.v[0] = 0;
 			submitInfo.depth.vRange.v[1] = 1;
 		}
+		flags = 0;
 		m_vrCompositor->Submit(vr::Eye_Left, &submitInfo, &leftBounds, (vr::EVRSubmitFlags)flags);
 
 		if (m_depthTex != nullptr)

@@ -532,10 +532,14 @@ namespace dxvk {
   void DxvkDevice::presentImage(
     const Rc<Presenter>&            presenter,
     const Rc<DxvkLatencyTracker>&   tracker,
+    const Rc<DxvkImage>&            vrColorImage,
+    const Rc<DxvkImage>&            vrDepthImage,
           uint64_t                  frameId,
           DxvkSubmitStatus*         status) {
     DxvkPresentInfo presentInfo = { };
     presentInfo.presenter = presenter;
+    presentInfo.vrColorImage = vrColorImage;
+    presentInfo.vrDepthImage = vrDepthImage;
     presentInfo.frameId = frameId;
 
     DxvkLatencyInfo latencyInfo;
