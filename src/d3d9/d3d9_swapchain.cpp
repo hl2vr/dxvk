@@ -879,7 +879,8 @@ namespace dxvk {
       viewInfo.layerCount = 1u;
 
       Rc<DxvkImage> vrColorImage, vrDepthImage;
-      g_hl2vr->GetVRSubmissionImages(vrColorImage, vrDepthImage);
+      vr::HmdMatrix34_t vrHmdPose;
+      uint64_t vrFrameId = g_hl2vr->GetVRSubmissionInfo(vrColorImage, vrDepthImage, vrHmdPose);
 
       m_parent->EmitCs([
         cDevice         = m_device,
@@ -892,6 +893,8 @@ namespace dxvk {
         cDstRect        = dstRect,
         cVRColorImage   = vrColorImage,
         cVRDepthImage   = vrDepthImage,
+        cVRHmdPose      = vrHmdPose,
+        cVRFrameId      = vrFrameId,
         cSync           = sync,
         cFrameId        = m_wctx->frameId,
         cLatency        = m_latencyTracker
@@ -914,7 +917,7 @@ namespace dxvk {
         ctx->synchronizeWsi(cSync);
         ctx->flushCommandList(nullptr, nullptr);
 
-        cDevice->presentImage(cPresenter, cLatency, cVRColorImage, cVRDepthImage, cFrameId, nullptr);
+        cDevice->presentImage(cPresenter, cLatency, cVRColorImage, cVRDepthImage, &cVRHmdPose.m[0][0], cVRFrameId, cFrameId, nullptr);
       });
 
       m_parent->FlushCsChunk();

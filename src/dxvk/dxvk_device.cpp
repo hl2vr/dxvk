@@ -534,12 +534,16 @@ namespace dxvk {
     const Rc<DxvkLatencyTracker>&   tracker,
     const Rc<DxvkImage>&            vrColorImage,
     const Rc<DxvkImage>&            vrDepthImage,
+    const float*                    vrHmdPose,
+          uint64_t                  vrFrameId,
           uint64_t                  frameId,
           DxvkSubmitStatus*         status) {
     DxvkPresentInfo presentInfo = { };
     presentInfo.presenter = presenter;
     presentInfo.vrColorImage = vrColorImage;
     presentInfo.vrDepthImage = vrDepthImage;
+    memcpy(presentInfo.vrHmdPose, vrHmdPose, sizeof(presentInfo.vrHmdPose));
+    presentInfo.vrFrameId = vrFrameId;
     presentInfo.frameId = frameId;
 
     DxvkLatencyInfo latencyInfo;

@@ -5,6 +5,6 @@
 class VkSubmitThreadCallback {
 public:
 	virtual void PreSubmitCallback() = 0;
-	virtual void PrePresentCallBack(dxvk::Rc<dxvk::DxvkImage> vrColorImage, dxvk::Rc<dxvk::DxvkImage> vrDepthImage) = 0;
-	virtual void PostPresentCallback() = 0;
+	virtual void PrePresentCallBack(dxvk::Rc<dxvk::DxvkImage> vrColorImage, dxvk::Rc<dxvk::DxvkImage> vrDepthImage, float* vrHmdPose) = 0;
+	virtual void PostPresentCallback(uint64_t vrFrameId) = 0;
 };

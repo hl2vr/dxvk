@@ -16,7 +16,7 @@ void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor
 	std::unique_lock lock(m_frameSyncMutex);
 	m_vrSystem = vrSystem;
 	m_vrCompositor = vrCompositor;
-	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
+	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_RuntimePerformsPostPresentHandoff);
 	m_vrOverlay = vrOverlay;
 	m_overlayHandle = overlayHandle;
 
@@ -52,6 +52,29 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 		m_msaa = 0;
 }
 
+void HL2VRInterop::StartFrame(const vr::HmdMatrix34_t& hmdPose)
+{
+	std::unique_lock lock(m_frameSyncMutex);
+	if (!m_initialized || m_loadingScreenModeEnabled)
+		return;
+
+	// frame rendering potentially starts on the MatQueue thread; we need to make sure the previous frame is already
+	// started, otherwise we could cause a race condition here
+	while (m_frameRenderingStarted < m_frameStarted)
+	{
+		Logger::info("VR: Waiting for previous frame to start rendering: " + std::to_string(m_frameStarted));
+		if (m_condFrameRenderStarted.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
+		{
+			Logger::warn("VR: previous frame has not started rendering");
+			break;
+		}
+	}
+
+	m_frameStarted = m_framePrepared.load();
+	m_headsetPoseForRendering = hmdPose;
+	Logger::info("VR: Starting frame " + std::to_string(m_frameStarted));
+}
+
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
 {
 	std::unique_lock lock(m_frameSyncMutex);
@@ -61,31 +84,40 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	if (m_device == nullptr)
 		return;
 
-	if (m_frameAwaited)
+	uint64_t targetAwaitFrameId = m_framePrepared;
+	if (matQueueMode && targetAwaitFrameId > 0)
+		--targetAwaitFrameId;
+
+	if (targetAwaitFrameId > 0 && m_frameCompleted < targetAwaitFrameId)
 	{
-		// still awaiting previous frame's present call
-		if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
+		// still awaiting previous frame's WaitGetPoses call
+		Logger::info("VR: Awaiting frame " + std::to_string(targetAwaitFrameId));
+		while (m_frameCompleted < targetAwaitFrameId)
 		{
-			Logger::warn("VR: Awaiting previous frame present timed out");
+			if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
+			{
+				Logger::warn("VR: Awaiting previous frame present timed out");
+				break;
+			}
 		}
-		m_frameAwaited = false;
 	}
 
-	++m_frameCounter;
-	if (m_colorTex != nullptr)
-	{
-		// only call WaitGetPoses if we have a color texture from the previous frame, as otherwise the Vulkan queues might be out of date
-		vr::TrackedDevicePose_t hmdPose;
-		m_vrCompositor->WaitGetPoses(&hmdPose, 1, nullptr, 0);
-		m_headsetPose = matQueueMode ? m_headsetPoseForRendering : hmdPose.mDeviceToAbsoluteTracking;
-		m_frameAwaited = true;
+	vr::TrackedDevicePose_t curHmdPose, predictedHmdPose;
+	m_vrCompositor->GetLastPoses(&curHmdPose, 1, &predictedHmdPose, 1);
+	m_curHeadsetPose = curHmdPose;
+	m_predictedHeadsetPose = predictedHmdPose;
 
-		UpdateFoveationTexture();
-	}
+	m_frameAwaited = m_frameCompleted.load();
+	++m_framePrepared;
+	Logger::info("VR: Frame " + std::to_string(m_framePrepared) + " prepared");
 
-	m_colorTex = nullptr;
-	m_depthTex = nullptr;
-	m_timingInfoSubmitted = false;
+	m_condFrameAwaited.notify_one();
+}
+
+void HL2VRInterop::GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose)
+{
+	hmdPose = m_curHeadsetPose;
+	predictedHmdPose = m_predictedHeadsetPose;
 }
 
 void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
@@ -133,7 +165,7 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	}
 }
 
-void HL2VRInterop::GetVRSubmissionImages(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage)
+uint64_t HL2VRInterop::GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, vr::HmdMatrix34_t& vrHmdPose)
 {
 	vrColorImage = nullptr;
 	vrDepthImage = nullptr;
@@ -153,10 +185,16 @@ void HL2VRInterop::GetVRSubmissionImages(Rc<DxvkImage>& vrColorImage, Rc<DxvkIma
 		if (vrDepthImage->info().sampleCount > 1)
 			vrDepthImage = rt->GetCommonTexture()->GetResolveImage();
 	}
+
+	vrHmdPose = m_headsetPose;
+
+	return m_frameRenderingStarted.load();
 }
 
 void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 {
+	m_colorTex = nullptr;
+	m_depthTex = nullptr;
 }
 
 void HL2VRInterop::PreSubmitCallback()
@@ -188,9 +226,9 @@ void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_
 	data.m_nSampleCount = info.sampleCount;
 }
 
-void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage)
+void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, float* vrHmdPose)
 {
-	if (!m_initialized || !m_timingInfoSubmitted || !m_frameAwaited || vrColorImage == nullptr)
+	if (!m_initialized || !m_timingInfoSubmitted || vrColorImage == nullptr)
 		return;
 
 	if (m_vrCompositor->CanRenderScene()) {
@@ -203,7 +241,7 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 		submitInfo.eType = vr::TextureType_Vulkan;
 		submitInfo.eColorSpace = vr::ColorSpace_Auto;
 		submitInfo.handle = (void*)&colorTexData;
-		submitInfo.mDeviceToAbsoluteTracking = m_headsetPose;
+		memcpy(&submitInfo.mDeviceToAbsoluteTracking.m[0][0], vrHmdPose, sizeof(submitInfo.mDeviceToAbsoluteTracking));
 
 		int flags = vr::Submit_TextureWithPose;
 		if (vrDepthImage != nullptr)
@@ -215,25 +253,32 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 			submitInfo.depth.vRange.v[0] = 0;
 			submitInfo.depth.vRange.v[1] = 1;
 		}
-		flags = 0;
 		m_vrCompositor->Submit(vr::Eye_Left, &submitInfo, &leftBounds, (vr::EVRSubmitFlags)flags);
 
-		if (m_depthTex != nullptr)
+		if (vrDepthImage != nullptr)
 			submitInfo.depth.mProjection = m_projectionRight;
 		m_vrCompositor->Submit(vr::Eye_Right, &submitInfo, &rightBounds, (vr::EVRSubmitFlags)flags);
 	}
 }
 
-void HL2VRInterop::PostPresentCallback()
+void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
 {
-	if (!m_initialized || !m_frameAwaited)
+	if (!m_initialized)
 		return;
 
-	m_vrCompositor->PostPresentHandoff();
+	if (m_frameAwaited < m_frameCompleted)
+	{
+		Logger::info("VR: Wait until previous frame was awaited: " + std::to_string(m_frameCompleted));
+		std::unique_lock lock(m_frameSyncMutex);
+		m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameCompleted; });
+	}
+
+	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
 
 	std::unique_lock lock(m_frameSyncMutex);
 	m_timingInfoSubmitted = false;
-	m_frameAwaited = false;
+	m_frameCompleted = vrFrameId;
+	Logger::info("VR: Completed frame " + std::to_string(m_frameCompleted));
 	m_condFramePresented.notify_one();
 }
 
@@ -247,6 +292,14 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_colorTex == nullptr)
 	{
 		m_colorTex = rt;
+
+		// on first set of our render texture, consider this the start of our frame rendering
+		UpdateFoveationTexture();
+		std::unique_lock lock(m_frameSyncMutex);
+		m_frameRenderingStarted = m_frameStarted.load();
+		m_headsetPose = m_headsetPoseForRendering;
+		Logger::info("VR: Started rendering frame " + std::to_string(m_frameStarted));
+		m_condFrameRenderStarted.notify_one();
 	}
 
 	UpdateFoveationMode(m_colorTex == rt);
@@ -263,11 +316,6 @@ void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
 	{
 		m_depthTex = depth;
 	}
-}
-
-void HL2VRInterop::SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose)
-{
-	m_headsetPoseForRendering = pose;
 }
 
 void HL2VRInterop::EnableFoveatedRendering(bool enabled)

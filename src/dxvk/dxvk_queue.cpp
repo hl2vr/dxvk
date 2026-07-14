@@ -179,7 +179,7 @@ namespace dxvk {
         } else if (entry.present.presenter != nullptr) {
           if (g_pVkSubmitThreadCallback != nullptr)
           {
-            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage);
+            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage, &entry.present.vrHmdPose[0][0]);
           }
 
           if (entry.latency.tracker)
@@ -195,11 +195,6 @@ namespace dxvk {
             trackedPresentId = entry.latency.frameId;
             trackedSubmitId = 0u;
           }
-
-          if (g_pVkSubmitThreadCallback != nullptr)
-          {
-            g_pVkSubmitThreadCallback->PostPresentCallback();
-          }
         }
 
         if (m_callback)
@@ -212,6 +207,9 @@ namespace dxvk {
 
       if (entry.status)
         entry.status->result = entry.result;
+
+      uint64_t vrFrameId = entry.present.vrFrameId;
+      bool doVRPostPresent = entry.present.vrColorImage != nullptr;
       
       // On success, pass it on to the queue thread
       { std::unique_lock<dxvk::mutex> lock(m_mutex);
@@ -231,6 +229,11 @@ namespace dxvk {
 
         m_submitQueue.pop();
         m_submitCond.notify_all();
+      }
+
+      if (doVRPostPresent && g_pVkSubmitThreadCallback != nullptr)
+      {
+        g_pVkSubmitThreadCallback->PostPresentCallback(vrFrameId);
       }
 
       // Good time to invoke allocator tasks now since we

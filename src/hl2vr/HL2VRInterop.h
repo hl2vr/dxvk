@@ -20,19 +20,20 @@ public:
 
 	void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) override;
 
+	void StartFrame(const vr::HmdMatrix34_t& hmdPose) override;
 	void AwaitFrame(bool matQueueMode) override;
+
+	void GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose) override;
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
 	void OnPrePresent(D3D9DeviceEx* device);
-	void GetVRSubmissionImages(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage);
+	uint64_t GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, vr::HmdMatrix34_t& vrHmdPose);
 	void OnPostPresent(D3D9DeviceEx* device);
 	void PreSubmitCallback() override;
-	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage) override;
-	void PostPresentCallback() override;
+	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, float* vrHmdPose) override;
+	void PostPresentCallback(uint64_t vrFrameId) override;
 	void OnSetRenderTarget(IDirect3DSurface9 *rt);
 	void OnSetDepthStencil(IDirect3DSurface9 *depth);
-
-	void SetHeadsetPoseUsedForRendering(const vr::HmdMatrix34_t &pose) override;
 
 	void EnableFoveatedRendering(bool enabled) override;
 	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3) override;
@@ -61,12 +62,20 @@ private:
 	uint32_t m_renderHeight = 0;
 	int m_msaa = 0;
 
-	std::atomic<bool> m_frameAwaited = false;
+	std::atomic<uint64_t> m_framePrepared = 0;
+	std::atomic<uint64_t> m_frameAwaited = 0;
+	std::atomic<uint64_t> m_frameStarted = 0;
+	std::atomic<uint64_t> m_frameRenderingStarted = 0;
+	std::atomic<uint64_t> m_frameCompleted = 0;
 	std::atomic<bool> m_timingInfoSubmitted = false;
 	mutex m_frameSyncMutex;
+	condition_variable m_condFrameRenderStarted;
 	condition_variable m_condFramePresented;
+	condition_variable m_condFrameAwaited;
 	std::atomic<int> m_frameCounter = 0;
 
+	vr::TrackedDevicePose_t m_curHeadsetPose;
+	vr::TrackedDevicePose_t m_predictedHeadsetPose;
 	vr::HmdMatrix34_t m_headsetPoseForRendering;
 	vr::HmdMatrix34_t m_headsetPose;
 
