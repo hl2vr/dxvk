@@ -62,7 +62,6 @@ void HL2VRInterop::StartFrame(const vr::HmdMatrix34_t& hmdPose)
 	// started, otherwise we could cause a race condition here
 	while (m_frameRenderingStarted < m_frameStarted)
 	{
-		Logger::info("VR: Waiting for previous frame to start rendering: " + std::to_string(m_frameStarted));
 		if (m_condFrameRenderStarted.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
 		{
 			Logger::warn("VR: previous frame has not started rendering");
@@ -72,7 +71,6 @@ void HL2VRInterop::StartFrame(const vr::HmdMatrix34_t& hmdPose)
 
 	m_frameStarted = m_framePrepared.load();
 	m_headsetPoseForRendering = hmdPose;
-	Logger::info("VR: Starting frame " + std::to_string(m_frameStarted));
 }
 
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
@@ -91,7 +89,6 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	if (targetAwaitFrameId > 0 && m_frameCompleted < targetAwaitFrameId)
 	{
 		// still awaiting previous frame's WaitGetPoses call
-		Logger::info("VR: Awaiting frame " + std::to_string(targetAwaitFrameId));
 		while (m_frameCompleted < targetAwaitFrameId)
 		{
 			if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
@@ -109,7 +106,6 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 
 	m_frameAwaited = m_frameCompleted.load();
 	++m_framePrepared;
-	Logger::info("VR: Frame " + std::to_string(m_framePrepared) + " prepared");
 
 	m_condFrameAwaited.notify_one();
 }
@@ -268,7 +264,6 @@ void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
 
 	if (m_frameAwaited < m_frameCompleted)
 	{
-		Logger::info("VR: Wait until previous frame was awaited: " + std::to_string(m_frameCompleted));
 		std::unique_lock lock(m_frameSyncMutex);
 		m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameCompleted; });
 	}
@@ -278,7 +273,6 @@ void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
 	std::unique_lock lock(m_frameSyncMutex);
 	m_timingInfoSubmitted = false;
 	m_frameCompleted = vrFrameId;
-	Logger::info("VR: Completed frame " + std::to_string(m_frameCompleted));
 	m_condFramePresented.notify_one();
 }
 
@@ -298,7 +292,6 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 		std::unique_lock lock(m_frameSyncMutex);
 		m_frameRenderingStarted = m_frameStarted.load();
 		m_headsetPose = m_headsetPoseForRendering;
-		Logger::info("VR: Started rendering frame " + std::to_string(m_frameStarted));
 		m_condFrameRenderStarted.notify_one();
 	}
 
