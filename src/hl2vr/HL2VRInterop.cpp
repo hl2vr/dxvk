@@ -450,7 +450,7 @@ void HL2VRInterop::UpdateFoveationTexture()
 void HL2VRInterop::ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth)
 {
 	auto *commonTex = static_cast<D3D9Surface*>(texture)->GetCommonTexture();
-	VkImageAspectFlags aspect = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	VkImageAspectFlags aspect = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 	VkImageSubresourceRange subresources = {
 		aspect,
 		0, commonTex->GetImage()->info().mipLevels,
