@@ -534,6 +534,7 @@ namespace dxvk {
     const Rc<DxvkLatencyTracker>&   tracker,
     const Rc<DxvkImage>&            vrColorImage,
     const Rc<DxvkImage>&            vrDepthImage,
+    const Rc<DxvkImage>&            vrHudImage,
     const float*                    vrHmdPose,
           uint64_t                  vrFrameId,
           uint64_t                  frameId,
@@ -542,6 +543,7 @@ namespace dxvk {
     presentInfo.presenter = presenter;
     presentInfo.vrColorImage = vrColorImage;
     presentInfo.vrDepthImage = vrDepthImage;
+    presentInfo.vrHudImage = vrHudImage;
     memcpy(presentInfo.vrHmdPose, vrHmdPose, sizeof(presentInfo.vrHmdPose));
     presentInfo.vrFrameId = vrFrameId;
     presentInfo.frameId = frameId;

@@ -46,6 +46,7 @@ namespace dxvk {
     Rc<Presenter>       presenter;
     Rc<DxvkImage>       vrColorImage;
     Rc<DxvkImage>       vrDepthImage;
+    Rc<DxvkImage>       vrHudImage;
     float               vrHmdPose[3][4];
     uint64_t            vrFrameId;
     uint64_t            frameId;

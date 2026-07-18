@@ -179,7 +179,7 @@ namespace dxvk {
         } else if (entry.present.presenter != nullptr) {
           if (g_pVkSubmitThreadCallback != nullptr)
           {
-            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage, &entry.present.vrHmdPose[0][0]);
+            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage, entry.present.vrHudImage, &entry.present.vrHmdPose[0][0]);
           }
 
           if (entry.latency.tracker)

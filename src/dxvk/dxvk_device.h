@@ -576,6 +576,7 @@ namespace dxvk {
       const Rc<DxvkLatencyTracker>&   tracker,
       const Rc<DxvkImage>&            vrColorImage,
       const Rc<DxvkImage>&            vrDepthImage,
+      const Rc<DxvkImage>&            vrHudImage,
       const float*                    vrHmdPose,
             uint64_t                  vrFrameId,
             uint64_t                  frameId,

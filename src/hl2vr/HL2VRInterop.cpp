@@ -34,6 +34,7 @@ void HL2VRInterop::Shutdown()
 
 	m_colorTex = nullptr;
 	m_depthTex = nullptr;
+	m_hudTex = nullptr;
 	m_vrsImage = nullptr;
 	m_device = nullptr;
 }
@@ -159,12 +160,16 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	if (m_depthTex != nullptr) {
 		ResolveAndTransitionTexture(m_depthTex.ptr(), true);
 	}
+	if (m_hudTex != nullptr) {
+		ResolveAndTransitionTexture(m_hudTex.ptr(), true);
+	}
 }
 
-uint64_t HL2VRInterop::GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, vr::HmdMatrix34_t& vrHmdPose)
+uint64_t HL2VRInterop::GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose)
 {
 	vrColorImage = nullptr;
 	vrDepthImage = nullptr;
+	vrHudImage = nullptr;
 
 	if (m_colorTex != nullptr)
 	{
@@ -182,6 +187,14 @@ uint64_t HL2VRInterop::GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkI
 			vrDepthImage = rt->GetCommonTexture()->GetResolveImage();
 	}
 
+	if (m_hudTex != nullptr)
+	{
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_hudTex.ptr());
+		vrHudImage = rt->GetCommonTexture()->GetImage();
+		if (vrHudImage->info().sampleCount > 1)
+			vrHudImage = rt->GetCommonTexture()->GetResolveImage();
+	}
+
 	vrHmdPose = m_headsetPose;
 
 	return m_frameRenderingStarted.load();
@@ -191,6 +204,7 @@ void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
 {
 	m_colorTex = nullptr;
 	m_depthTex = nullptr;
+	m_hudTex = nullptr;
 }
 
 void HL2VRInterop::PreSubmitCallback()
@@ -222,7 +236,7 @@ void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_
 	data.m_nSampleCount = info.sampleCount;
 }
 
-void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, float* vrHmdPose)
+void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
 {
 	if (!m_initialized || !m_timingInfoSubmitted || vrColorImage == nullptr)
 		return;
@@ -254,6 +268,17 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 		if (vrDepthImage != nullptr)
 			submitInfo.depth.mProjection = m_projectionRight;
 		m_vrCompositor->Submit(vr::Eye_Right, &submitInfo, &rightBounds, (vr::EVRSubmitFlags)flags);
+
+		if (vrHudImage != nullptr && m_overlayHandle != 0)
+		{
+			vr::VRVulkanTextureData_t hudTexData;
+			FillTextureData(vrHudImage, hudTexData);
+			vr::Texture_t hudTexInfo;
+			hudTexInfo.eType = vr::TextureType_Vulkan;
+			hudTexInfo.handle = (void*)&hudTexData;
+			hudTexInfo.eColorSpace = vr::ColorSpace_Auto;
+			m_vrOverlay->SetOverlayTexture(m_overlayHandle, &hudTexInfo);
+		}
 	}
 }
 
@@ -293,6 +318,10 @@ void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
 		m_frameRenderingStarted = m_frameStarted.load();
 		m_headsetPose = m_headsetPoseForRendering;
 		m_condFrameRenderStarted.notify_one();
+	}
+	else if (desc.Width == 1281 && desc.Height == 720 && m_hudTex == nullptr)
+	{
+		m_hudTex = rt;
 	}
 
 	UpdateFoveationMode(m_colorTex == rt);

@@ -27,10 +27,10 @@ public:
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
 	void OnPrePresent(D3D9DeviceEx* device);
-	uint64_t GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, vr::HmdMatrix34_t& vrHmdPose);
+	uint64_t GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose);
 	void OnPostPresent(D3D9DeviceEx* device);
 	void PreSubmitCallback() override;
-	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, float* vrHmdPose) override;
+	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose) override;
 	void PostPresentCallback(uint64_t vrFrameId) override;
 	void OnSetRenderTarget(IDirect3DSurface9 *rt);
 	void OnSetDepthStencil(IDirect3DSurface9 *depth);
@@ -58,6 +58,7 @@ private:
 	Com<D3D9DeviceEx> m_device;
 	Com<IDirect3DSurface9> m_colorTex;
 	Com<IDirect3DSurface9> m_depthTex;
+	Com<IDirect3DSurface9> m_hudTex;
 	uint32_t m_renderWidth = 0;
 	uint32_t m_renderHeight = 0;
 	int m_msaa = 0;
