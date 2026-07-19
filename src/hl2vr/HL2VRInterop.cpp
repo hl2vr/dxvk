@@ -136,17 +136,7 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	{
 		Com<IDirect3DSurface9> renderTarget;
 		device->GetRenderTarget(0, &renderTarget);
-		if (renderTarget != nullptr && m_vrOverlay && m_overlayHandle)
-		{
-			vr::VRVulkanTextureData_t vulkanTextureData;
-			FillTextureData(static_cast<D3D9Surface*>(renderTarget.ptr())->GetCommonTexture()->GetImage(), vulkanTextureData);
-			vr::Texture_t textureData;
-			textureData.eType = vr::TextureType_Vulkan;
-			textureData.eColorSpace = vr::ColorSpace_Auto;
-			textureData.handle = (void*)&vulkanTextureData;
-
-			m_vrOverlay->SetOverlayTexture(m_overlayHandle, &textureData);
-		}
+		m_hudTex = renderTarget;
 		return;
 	}
 
@@ -238,10 +228,10 @@ void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_
 
 void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
 {
-	if (!m_initialized || !m_timingInfoSubmitted || vrColorImage == nullptr)
+	if (!m_initialized || !m_timingInfoSubmitted)
 		return;
 
-	if (m_vrCompositor->CanRenderScene()) {
+	if (m_vrCompositor->CanRenderScene() && vrColorImage != nullptr && !m_loadingScreenModeEnabled) {
 		static vr::VRTextureBounds_t leftBounds = {0.0f, 0.0f, 0.5f, 1.0f};
 		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
@@ -268,17 +258,21 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 		if (vrDepthImage != nullptr)
 			submitInfo.depth.mProjection = m_projectionRight;
 		m_vrCompositor->Submit(vr::Eye_Right, &submitInfo, &rightBounds, (vr::EVRSubmitFlags)flags);
+	}
+	else
+	{
+		m_vrCompositor->ClearLastSubmittedFrame();
+	}
 
-		if (vrHudImage != nullptr && m_overlayHandle != 0)
-		{
-			vr::VRVulkanTextureData_t hudTexData;
-			FillTextureData(vrHudImage, hudTexData);
-			vr::Texture_t hudTexInfo;
-			hudTexInfo.eType = vr::TextureType_Vulkan;
-			hudTexInfo.handle = (void*)&hudTexData;
-			hudTexInfo.eColorSpace = vr::ColorSpace_Auto;
-			m_vrOverlay->SetOverlayTexture(m_overlayHandle, &hudTexInfo);
-		}
+	if (vrHudImage != nullptr && m_overlayHandle != 0)
+	{
+		vr::VRVulkanTextureData_t hudTexData;
+		FillTextureData(vrHudImage, hudTexData);
+		vr::Texture_t hudTexInfo;
+		hudTexInfo.eType = vr::TextureType_Vulkan;
+		hudTexInfo.handle = (void*)&hudTexData;
+		hudTexInfo.eColorSpace = vr::ColorSpace_Auto;
+		m_vrOverlay->SetOverlayTexture(m_overlayHandle, &hudTexInfo);
 	}
 }
 
