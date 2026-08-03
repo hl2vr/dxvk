@@ -228,7 +228,7 @@ void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_
 
 void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
 {
-	if (!m_initialized || !m_timingInfoSubmitted)
+	if (!m_initialized || (!m_timingInfoSubmitted && !m_loadingScreenModeEnabled))
 		return;
 
 	if (m_vrCompositor->CanRenderScene() && vrColorImage != nullptr && !m_loadingScreenModeEnabled) {
@@ -278,7 +278,7 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 
 void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
 {
-	if (!m_initialized)
+	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
 
 	if (m_frameAwaited < m_frameCompleted)
