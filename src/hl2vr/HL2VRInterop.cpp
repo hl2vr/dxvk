@@ -16,7 +16,7 @@ void HL2VRInterop::Init(vr::IVRSystem *vrSystem, vr::IVRCompositor *vrCompositor
 	std::unique_lock lock(m_frameSyncMutex);
 	m_vrSystem = vrSystem;
 	m_vrCompositor = vrCompositor;
-	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_RuntimePerformsPostPresentHandoff);
+	m_vrCompositor->SetExplicitTimingMode(vr::VRCompositorTimingMode_Explicit_ApplicationPerformsPostPresentHandoff);
 	m_vrOverlay = vrOverlay;
 	m_overlayHandle = overlayHandle;
 
@@ -76,6 +76,11 @@ void HL2VRInterop::StartFrame(const vr::HmdMatrix34_t& hmdPose)
 
 void HL2VRInterop::AwaitFrame(bool matQueueMode)
 {
+	if (!matQueueMode)
+	{
+		SyncVR();
+	}
+
 	std::unique_lock lock(m_frameSyncMutex);
 	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
@@ -84,15 +89,16 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 		return;
 
 	uint64_t targetAwaitFrameId = m_framePrepared;
+	m_matQueueMode = matQueueMode;
 	if (matQueueMode && targetAwaitFrameId > 0)
 		--targetAwaitFrameId;
 
-	if (targetAwaitFrameId > 0 && m_frameCompleted < targetAwaitFrameId)
+	if (targetAwaitFrameId > 0 && m_frameSynced < targetAwaitFrameId)
 	{
 		// still awaiting previous frame's WaitGetPoses call
-		while (m_frameCompleted < targetAwaitFrameId)
+		while (m_frameSynced < targetAwaitFrameId)
 		{
-			if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
+			if (m_condFrameSynced.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
 			{
 				Logger::warn("VR: Awaiting previous frame present timed out");
 				break;
@@ -105,10 +111,40 @@ void HL2VRInterop::AwaitFrame(bool matQueueMode)
 	m_curHeadsetPose = curHmdPose;
 	m_predictedHeadsetPose = predictedHmdPose;
 
-	m_frameAwaited = m_frameCompleted.load();
+	m_frameAwaited = m_frameSynced.load();
 	++m_framePrepared;
 
 	m_condFrameAwaited.notify_one();
+}
+
+void HL2VRInterop::OnBeginScene()
+{
+	if (m_matQueueMode)
+		SyncVR();
+}
+
+void HL2VRInterop::SyncVR()
+{
+	if (!m_initialized || m_loadingScreenModeEnabled)
+		return;
+
+	if (m_framePresented <= m_frameSynced)
+	{
+		std::unique_lock lock(m_frameSyncMutex);
+		m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_framePresented > m_frameSynced; });
+	}
+
+	if (m_frameAwaited < m_frameSynced)
+	{
+		std::unique_lock lock(m_frameSyncMutex);
+		m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameSynced; });
+	}
+
+	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
+
+	std::unique_lock lock(m_frameSyncMutex);
+	m_frameSynced = m_framePresented.load();
+	m_condFrameSynced.notify_one();
 }
 
 void HL2VRInterop::GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose)
@@ -281,17 +317,11 @@ void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
 	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
 
-	if (m_frameAwaited < m_frameCompleted)
-	{
-		std::unique_lock lock(m_frameSyncMutex);
-		m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameCompleted; });
-	}
-
-	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
+	m_vrCompositor->PostPresentHandoff();
 
 	std::unique_lock lock(m_frameSyncMutex);
 	m_timingInfoSubmitted = false;
-	m_frameCompleted = vrFrameId;
+	m_framePresented = vrFrameId;
 	m_condFramePresented.notify_one();
 }
 

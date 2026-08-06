@@ -23,6 +23,10 @@ public:
 	void StartFrame(const vr::HmdMatrix34_t& hmdPose) override;
 	void AwaitFrame(bool matQueueMode) override;
 
+	void OnBeginScene();
+
+	void SyncVR();
+
 	void GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose) override;
 
 	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
@@ -67,11 +71,14 @@ private:
 	std::atomic<uint64_t> m_frameAwaited = 0;
 	std::atomic<uint64_t> m_frameStarted = 0;
 	std::atomic<uint64_t> m_frameRenderingStarted = 0;
-	std::atomic<uint64_t> m_frameCompleted = 0;
+	std::atomic<uint64_t> m_framePresented = 0;
+	std::atomic<uint64_t> m_frameSynced = 0;
+	std::atomic<bool> m_matQueueMode = false;
 	std::atomic<bool> m_timingInfoSubmitted = false;
 	mutex m_frameSyncMutex;
 	condition_variable m_condFrameRenderStarted;
 	condition_variable m_condFramePresented;
+	condition_variable m_condFrameSynced;
 	condition_variable m_condFrameAwaited;
 	std::atomic<int> m_frameCounter = 0;
 

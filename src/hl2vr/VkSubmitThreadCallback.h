@@ -8,3 +8,8 @@ public:
 	virtual void PrePresentCallBack(dxvk::Rc<dxvk::DxvkImage> vrColorImage, dxvk::Rc<dxvk::DxvkImage> vrDepthImage, dxvk::Rc<dxvk::DxvkImage> vrHudImage, float* vrHmdPose) = 0;
 	virtual void PostPresentCallback(uint64_t vrFrameId) = 0;
 };
+
+namespace dxvk
+{
+extern VkSubmitThreadCallback *g_pVkSubmitThreadCallback;
+}
