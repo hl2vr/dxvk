@@ -131,13 +131,19 @@ void HL2VRInterop::SyncVR()
 	if (m_framePresented <= m_frameSynced)
 	{
 		std::unique_lock lock(m_frameSyncMutex);
-		m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_framePresented > m_frameSynced; });
+		if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_framePresented > m_frameSynced; }) == false)
+		{
+			Logger::warn("VR: previous frame not presented");
+		}
 	}
 
 	if (m_frameAwaited < m_frameSynced)
 	{
 		std::unique_lock lock(m_frameSyncMutex);
-		m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameSynced; });
+		if (m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameSynced; }) == false)
+		{
+			Logger::warn("VR: previous frame not awaited");
+		}
 	}
 
 	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
