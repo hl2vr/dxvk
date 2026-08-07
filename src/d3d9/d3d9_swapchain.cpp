@@ -880,7 +880,7 @@ namespace dxvk {
 
       Rc<DxvkImage> vrColorImage, vrDepthImage, vrHudImage;
       vr::HmdMatrix34_t vrHmdPose;
-      uint64_t vrFrameId = g_hl2vr->GetVRSubmissionInfo(vrColorImage, vrDepthImage, vrHudImage, vrHmdPose);
+      uint64_t vrFrameId = g_hl2vr->Mat_GetVRSubmissionInfo(vrColorImage, vrDepthImage, vrHudImage, vrHmdPose);
 
       m_parent->EmitCs([
         cDevice         = m_device,

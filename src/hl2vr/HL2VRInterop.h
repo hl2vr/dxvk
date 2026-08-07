@@ -20,24 +20,20 @@ public:
 
 	void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) override;
 
-	void StartFrame(const vr::HmdMatrix34_t& hmdPose) override;
-	void AwaitFrame(bool matQueueMode) override;
+	void Mat_AwaitFrame(uint64_t frameId) override;
+	void Mat_SetHeadsetRenderingPose(const vr::HmdMatrix34_t &pose) override;
 
-	void OnBeginScene();
+	void SyncFrameGetPoses(uint64_t frameId, vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose) override;
 
-	void SyncVR();
-
-	void GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose) override;
-
-	void ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
-	void OnPrePresent(D3D9DeviceEx* device);
-	uint64_t GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose);
-	void OnPostPresent(D3D9DeviceEx* device);
-	void PreSubmitCallback() override;
-	void PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose) override;
-	void PostPresentCallback(uint64_t vrFrameId) override;
-	void OnSetRenderTarget(IDirect3DSurface9 *rt);
-	void OnSetDepthStencil(IDirect3DSurface9 *depth);
+	void Mat_ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC& desc);
+	void Mat_OnPrePresent(D3D9DeviceEx* device);
+	uint64_t Mat_GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose);
+	void Mat_OnPostPresent(D3D9DeviceEx* device);
+	void Submit_PreSubmitCallback() override;
+	void Submit_PrePresentCallBack(uint64_t vrFrameId, Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose) override;
+	void Submit_PostPresentCallback(uint64_t vrFrameId) override;
+	void Mat_OnSetRenderTarget(IDirect3DSurface9 *rt);
+	void Mat_OnSetDepthStencil(IDirect3DSurface9 *depth);
 
 	void EnableFoveatedRendering(bool enabled) override;
 	void SetFoveationParams(float centerLX, float centerLY, float centerRX, float centerRY, float radius1, float radius2, float radius3) override;
@@ -46,10 +42,10 @@ public:
 
 private:
 	void UpdateFoveationMode(bool shouldEnable);
-	void UpdateFoveationTexture();
+	void Mat_UpdateFoveationTexture();
 
-	void ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth);
-	void FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t& data);
+	void Mat_ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth);
+	void Submit_FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t& data);
 
 	std::atomic<bool> m_initialized = false;
 
@@ -60,32 +56,26 @@ private:
 	std::atomic<bool> m_loadingScreenModeEnabled = false;
 
 	Com<D3D9DeviceEx> m_device;
-	Com<IDirect3DSurface9> m_colorTex;
-	Com<IDirect3DSurface9> m_depthTex;
-	Com<IDirect3DSurface9> m_hudTex;
+	Com<IDirect3DSurface9> m_mat_colorTex;
+	Com<IDirect3DSurface9> m_mat_depthTex;
+	Com<IDirect3DSurface9> m_mat_hudTex;
 	uint32_t m_renderWidth = 0;
 	uint32_t m_renderHeight = 0;
 	int m_msaa = 0;
 
-	std::atomic<uint64_t> m_framePrepared = 0;
-	std::atomic<uint64_t> m_frameAwaited = 0;
-	std::atomic<uint64_t> m_frameStarted = 0;
-	std::atomic<uint64_t> m_frameRenderingStarted = 0;
-	std::atomic<uint64_t> m_framePresented = 0;
-	std::atomic<uint64_t> m_frameSynced = 0;
-	std::atomic<bool> m_matQueueMode = false;
-	std::atomic<bool> m_timingInfoSubmitted = false;
 	mutex m_frameSyncMutex;
-	condition_variable m_condFrameRenderStarted;
-	condition_variable m_condFramePresented;
-	condition_variable m_condFrameSynced;
-	condition_variable m_condFrameAwaited;
-	std::atomic<int> m_frameCounter = 0;
 
-	vr::TrackedDevicePose_t m_curHeadsetPose;
-	vr::TrackedDevicePose_t m_predictedHeadsetPose;
-	vr::HmdMatrix34_t m_headsetPoseForRendering;
-	vr::HmdMatrix34_t m_headsetPose;
+	std::atomic<uint64_t> m_mat_frameAwaitedId = 0;
+	std::atomic<uint64_t> m_submit_frameSubmitId = 0;
+	std::atomic<uint64_t> m_submit_frameHandoffId = 0;
+	bool m_mat_frameAwaited = false;
+	bool m_mat_framePresented = false;
+	condition_variable m_condFrameAwaited;
+	condition_variable m_condFrameHandedOff;
+
+	vr::TrackedDevicePose_t m_mat_curHeadsetPose;
+	vr::TrackedDevicePose_t m_mat_predictedHeadsetPose;
+	vr::HmdMatrix34_t m_mat_headsetPoseForRendering;
 
 	bool m_FoveatedRenderingEnabled = false;
 	bool m_FoveationNeedsUpdate = false;

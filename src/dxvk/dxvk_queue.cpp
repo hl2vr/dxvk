@@ -159,7 +159,7 @@ namespace dxvk {
 
         if (g_pVkSubmitThreadCallback != nullptr)
         {
-          g_pVkSubmitThreadCallback->PreSubmitCallback();
+          g_pVkSubmitThreadCallback->Submit_PreSubmitCallback();
         }
 
         if (entry.submit.cmdList != nullptr) {
@@ -177,7 +177,7 @@ namespace dxvk {
         } else if (entry.present.presenter != nullptr) {
           if (g_pVkSubmitThreadCallback != nullptr)
           {
-            g_pVkSubmitThreadCallback->PrePresentCallBack(entry.present.vrColorImage, entry.present.vrDepthImage, entry.present.vrHudImage, &entry.present.vrHmdPose[0][0]);
+            g_pVkSubmitThreadCallback->Submit_PrePresentCallBack(entry.present.vrFrameId, entry.present.vrColorImage, entry.present.vrDepthImage, entry.present.vrHudImage, &entry.present.vrHmdPose[0][0]);
           }
 
           if (entry.latency.tracker)
@@ -206,10 +206,9 @@ namespace dxvk {
       if (entry.status)
         entry.status->result = entry.result;
 
-      uint64_t vrFrameId = entry.present.vrFrameId;
-      if (g_pVkSubmitThreadCallback != nullptr && entry.present.vrColorImage != nullptr)
+      if (g_pVkSubmitThreadCallback != nullptr)
       {
-    	g_pVkSubmitThreadCallback->PostPresentCallback(vrFrameId);
+    	g_pVkSubmitThreadCallback->Submit_PostPresentCallback(entry.present.vrFrameId);
       }
 
       // On success, pass it on to the queue thread

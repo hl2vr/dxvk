@@ -673,7 +673,7 @@ namespace dxvk {
     desc.MultisampleQuality = 0;
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = FALSE;
-  	g_hl2vr->ModifyTextureCreationDetails(desc);
+  	g_hl2vr->Mat_ModifyTextureCreationDetails(desc);
     // Docs:
     // Textures placed in the D3DPOOL_DEFAULT pool cannot be locked
     // unless they are dynamic textures or they are private, FOURCC, driver formats.
@@ -1641,7 +1641,7 @@ namespace dxvk {
 
   	if (RenderTargetIndex == 0)
   	{
-  		g_hl2vr->OnSetRenderTarget(pRenderTarget);
+  		g_hl2vr->Mat_OnSetRenderTarget(pRenderTarget);
   	}
 
     D3D9DeviceLock lock = LockDevice();
@@ -1796,7 +1796,7 @@ namespace dxvk {
 
 
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::SetDepthStencilSurface(IDirect3DSurface9* pNewZStencil) {
-  	g_hl2vr->OnSetDepthStencil(pNewZStencil);
+  	g_hl2vr->Mat_OnSetDepthStencil(pNewZStencil);
 
     D3D9DeviceLock lock = LockDevice();
 
@@ -1856,7 +1856,6 @@ namespace dxvk {
   // Some games don't even call them.
 
   HRESULT STDMETHODCALLTYPE D3D9DeviceEx::BeginScene() {
-  	g_hl2vr->OnBeginScene();
     D3D9DeviceLock lock = LockDevice();
 
     if (unlikely(m_flags.test(D3D9DeviceFlag::InScene)))
@@ -4239,7 +4238,7 @@ namespace dxvk {
     }
 
     //OpenVRDirectMode::Get()->PrePresent(this);
-  	g_hl2vr->OnPrePresent(this);
+  	g_hl2vr->Mat_OnPrePresent(this);
 
     HRESULT result = m_implicitSwapchain->Present(
       pSourceRect,
@@ -4249,7 +4248,7 @@ namespace dxvk {
       dwFlags);
 
     //OpenVRDirectMode::Get()->PostPresent();
-  	g_hl2vr->OnPostPresent(this);
+  	g_hl2vr->Mat_OnPostPresent(this);
 
     return result;
   }
@@ -4436,7 +4435,7 @@ namespace dxvk {
     desc.IsBackBuffer       = FALSE;
     desc.IsAttachmentOnly   = TRUE;
     desc.IsLockable         = IsLockableDepthStencilFormat(desc.Format);
-  	g_hl2vr->ModifyTextureCreationDetails(desc);
+  	g_hl2vr->Mat_ModifyTextureCreationDetails(desc);
 
     if (FAILED(D3D9CommonTexture::NormalizeTextureProperties(this, D3DRTYPE_SURFACE, &desc)))
       return D3DERR_INVALIDCALL;

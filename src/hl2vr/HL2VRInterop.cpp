@@ -32,9 +32,9 @@ void HL2VRInterop::Shutdown()
 	m_vrCompositor = nullptr;
 	m_vrOverlay = nullptr;
 
-	m_colorTex = nullptr;
-	m_depthTex = nullptr;
-	m_hudTex = nullptr;
+	m_mat_colorTex = nullptr;
+	m_mat_depthTex = nullptr;
+	m_mat_hudTex = nullptr;
 	m_vrsImage = nullptr;
 	m_device = nullptr;
 }
@@ -53,113 +53,73 @@ void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa
 		m_msaa = 0;
 }
 
-void HL2VRInterop::StartFrame(const vr::HmdMatrix34_t& hmdPose)
+void HL2VRInterop::Mat_AwaitFrame(uint64_t frameId)
 {
-	std::unique_lock lock(m_frameSyncMutex);
-	if (!m_initialized || m_loadingScreenModeEnabled)
-		return;
-
-	// frame rendering potentially starts on the MatQueue thread; we need to make sure the previous frame is already
-	// started, otherwise we could cause a race condition here
-	while (m_frameRenderingStarted < m_frameStarted)
-	{
-		if (m_condFrameRenderStarted.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
-		{
-			Logger::warn("VR: previous frame has not started rendering");
-			break;
-		}
-	}
-
-	m_frameStarted = m_framePrepared.load();
-	m_headsetPoseForRendering = hmdPose;
-}
-
-void HL2VRInterop::AwaitFrame(bool matQueueMode)
-{
-	if (!matQueueMode)
-	{
-		SyncVR();
-	}
-
-	std::unique_lock lock(m_frameSyncMutex);
 	if (!m_initialized || m_loadingScreenModeEnabled)
 		return;
 
 	if (m_device == nullptr)
 		return;
 
-	uint64_t targetAwaitFrameId = m_framePrepared;
-	m_matQueueMode = matQueueMode;
-	if (matQueueMode && targetAwaitFrameId > 0)
-		--targetAwaitFrameId;
-
-	if (targetAwaitFrameId > 0 && m_frameSynced < targetAwaitFrameId)
+	if (m_mat_framePresented && m_submit_frameHandoffId < m_mat_frameAwaitedId)
 	{
-		// still awaiting previous frame's WaitGetPoses call
-		while (m_frameSynced < targetAwaitFrameId)
+		// need to wait for the previous frame to be completed and handed off to the VR runtime before we can await the next frame
+		std::unique_lock lock(m_frameSyncMutex);
+		if (m_condFrameHandedOff.wait_for(lock, std::chrono::milliseconds(500), [this] { return m_submit_frameHandoffId >= m_mat_frameAwaitedId; }) == false)
 		{
-			if (m_condFrameSynced.wait_for(lock, std::chrono::milliseconds(250)) == std::cv_status::timeout)
-			{
-				Logger::warn("VR: Awaiting previous frame present timed out");
-				break;
-			}
+			Logger::warn("VR: previous frame not handed off, skipping WaitGetPoses");
+			m_mat_frameAwaited = false;
+			m_mat_framePresented = false;
+			m_mat_frameAwaitedId = frameId;
+			return;
 		}
 	}
 
-	vr::TrackedDevicePose_t curHmdPose, predictedHmdPose;
-	m_vrCompositor->GetLastPoses(&curHmdPose, 1, &predictedHmdPose, 1);
-	m_curHeadsetPose = curHmdPose;
-	m_predictedHeadsetPose = predictedHmdPose;
+	vr::TrackedDevicePose_t hmdPose, predictedHmdPose;
+	m_vrCompositor->WaitGetPoses(&hmdPose, 1, &predictedHmdPose, 1);
+	Mat_UpdateFoveationTexture();
 
-	m_frameAwaited = m_frameSynced.load();
-	++m_framePrepared;
+	std::unique_lock lock(m_frameSyncMutex);
 
+	m_mat_curHeadsetPose = hmdPose;
+	m_mat_predictedHeadsetPose = predictedHmdPose;
+	m_mat_colorTex = nullptr;
+	m_mat_depthTex = nullptr;
+	m_mat_hudTex = nullptr;
+
+	m_mat_frameAwaitedId = frameId;
+	m_mat_frameAwaited = true;
+	m_mat_framePresented = false;
 	m_condFrameAwaited.notify_one();
 }
 
-void HL2VRInterop::OnBeginScene()
+void HL2VRInterop::Mat_SetHeadsetRenderingPose(const vr::HmdMatrix34_t &pose)
 {
-	if (m_matQueueMode)
-		SyncVR();
+	m_mat_headsetPoseForRendering = pose;
 }
 
-void HL2VRInterop::SyncVR()
+void HL2VRInterop::SyncFrameGetPoses(uint64_t frameId, vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose)
 {
-	if (!m_initialized || m_loadingScreenModeEnabled)
+	if (frameId == 0 || !m_initialized || m_loadingScreenModeEnabled)
+	{
 		return;
-
-	if (m_framePresented <= m_frameSynced)
-	{
-		std::unique_lock lock(m_frameSyncMutex);
-		if (m_condFramePresented.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_framePresented > m_frameSynced; }) == false)
-		{
-			Logger::warn("VR: previous frame not presented");
-		}
 	}
-
-	if (m_frameAwaited < m_frameSynced)
-	{
-		std::unique_lock lock(m_frameSyncMutex);
-		if (m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(250), [this] { return m_frameAwaited >= m_frameSynced; }) == false)
-		{
-			Logger::warn("VR: previous frame not awaited");
-		}
-	}
-
-	m_vrCompositor->WaitGetPoses(nullptr, 0, nullptr, 0);
 
 	std::unique_lock lock(m_frameSyncMutex);
-	m_frameSynced = m_framePresented.load();
-	m_condFrameSynced.notify_one();
+
+	if (m_mat_frameAwaitedId < frameId)
+	{
+		if (m_condFrameAwaited.wait_for(lock, std::chrono::milliseconds(500), [this, frameId] { return m_mat_frameAwaitedId >= frameId; }) == false)
+		{
+			Logger::warn("VR: waiting for previous frame WGP timed out");
+		}
+	}
+
+	hmdPose = m_mat_curHeadsetPose;
+	predictedHmdPose = m_mat_predictedHeadsetPose;
 }
 
-void HL2VRInterop::GetHeadsetPoses(vr::TrackedDevicePose_t& hmdPose, vr::TrackedDevicePose_t& predictedHmdPose)
-{
-	hmdPose = m_curHeadsetPose;
-	predictedHmdPose = m_predictedHeadsetPose;
-}
-
-void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
+void HL2VRInterop::Mat_ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
 {
 	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight)
 	{
@@ -167,7 +127,7 @@ void HL2VRInterop::ModifyTextureCreationDetails(D3D9_COMMON_TEXTURE_DESC &desc)
 	}
 }
 
-void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
+void HL2VRInterop::Mat_OnPrePresent(D3D9DeviceEx *device)
 {
 	if (!m_initialized)
 		return;
@@ -178,76 +138,84 @@ void HL2VRInterop::OnPrePresent(D3D9DeviceEx *device)
 	{
 		Com<IDirect3DSurface9> renderTarget;
 		device->GetRenderTarget(0, &renderTarget);
-		m_hudTex = renderTarget;
+		m_mat_hudTex = renderTarget;
 		return;
 	}
 
-	if (!m_initialized || !m_frameAwaited)
+	if (!m_mat_frameAwaited)
 		return;
+
+	m_mat_framePresented = true;
 
 	// transition our render textures to proper image layout before submitting to OpenVR
-	if (m_colorTex != nullptr) {
-		ResolveAndTransitionTexture(m_colorTex.ptr(), false);
+	if (m_mat_colorTex != nullptr) {
+		Mat_ResolveAndTransitionTexture(m_mat_colorTex.ptr(), false);
 	}
-	if (m_depthTex != nullptr) {
-		ResolveAndTransitionTexture(m_depthTex.ptr(), true);
+	if (m_mat_depthTex != nullptr) {
+		Mat_ResolveAndTransitionTexture(m_mat_depthTex.ptr(), true);
 	}
-	if (m_hudTex != nullptr) {
-		ResolveAndTransitionTexture(m_hudTex.ptr(), true);
+	if (m_mat_hudTex != nullptr) {
+		Mat_ResolveAndTransitionTexture(m_mat_hudTex.ptr(), true);
 	}
 }
 
-uint64_t HL2VRInterop::GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose)
+uint64_t HL2VRInterop::Mat_GetVRSubmissionInfo(Rc<DxvkImage>& vrColorImage, Rc<DxvkImage>& vrDepthImage, Rc<DxvkImage>& vrHudImage, vr::HmdMatrix34_t& vrHmdPose)
 {
 	vrColorImage = nullptr;
 	vrDepthImage = nullptr;
 	vrHudImage = nullptr;
 
-	if (m_colorTex != nullptr)
+	if (m_mat_colorTex != nullptr)
 	{
-		D3D9Surface* rt = static_cast<D3D9Surface*>(m_colorTex.ptr());
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_mat_colorTex.ptr());
 		vrColorImage = rt->GetCommonTexture()->GetImage();
 		if (vrColorImage->info().sampleCount > 1)
 			vrColorImage = rt->GetCommonTexture()->GetResolveImage();
 	}
 
-	if (m_depthTex != nullptr)
+	if (m_mat_depthTex != nullptr)
 	{
-		D3D9Surface* rt = static_cast<D3D9Surface*>(m_depthTex.ptr());
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_mat_depthTex.ptr());
 		vrDepthImage = rt->GetCommonTexture()->GetImage();
 		if (vrDepthImage->info().sampleCount > 1)
 			vrDepthImage = rt->GetCommonTexture()->GetResolveImage();
 	}
 
-	if (m_hudTex != nullptr)
+	if (m_mat_hudTex != nullptr)
 	{
-		D3D9Surface* rt = static_cast<D3D9Surface*>(m_hudTex.ptr());
+		D3D9Surface* rt = static_cast<D3D9Surface*>(m_mat_hudTex.ptr());
 		vrHudImage = rt->GetCommonTexture()->GetImage();
 		if (vrHudImage->info().sampleCount > 1)
 			vrHudImage = rt->GetCommonTexture()->GetResolveImage();
 	}
 
-	vrHmdPose = m_headsetPose;
+	vrHmdPose = m_mat_headsetPoseForRendering;
 
-	return m_frameRenderingStarted.load();
+	return m_mat_frameAwaited ? m_mat_frameAwaitedId.load() : 0;
 }
 
-void HL2VRInterop::OnPostPresent(D3D9DeviceEx *device)
+void HL2VRInterop::Mat_OnPostPresent(D3D9DeviceEx *device)
 {
-	m_colorTex = nullptr;
-	m_depthTex = nullptr;
-	m_hudTex = nullptr;
+	m_mat_colorTex = nullptr;
+	m_mat_depthTex = nullptr;
+	m_mat_hudTex = nullptr;
+	m_mat_frameAwaited = false;
 }
 
-void HL2VRInterop::PreSubmitCallback()
+void HL2VRInterop::Submit_PreSubmitCallback()
 {
-	if (m_initialized && m_frameAwaited && !m_timingInfoSubmitted) {
+	if (!m_initialized || m_loadingScreenModeEnabled)
+		return;
+
+	uint64_t awaitedFrameId = m_mat_frameAwaitedId.load();
+	if (awaitedFrameId > m_submit_frameSubmitId)
+	{
 		m_vrCompositor->SubmitExplicitTimingData();
-		m_timingInfoSubmitted = true;
+		m_submit_frameSubmitId = awaitedFrameId;
 	}
 }
 
-void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t &data)
+void HL2VRInterop::Submit_FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_t &data)
 {
 	const auto& info = image->info();
 	data.m_nHeight = info.extent.height;
@@ -268,17 +236,17 @@ void HL2VRInterop::FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextureData_
 	data.m_nSampleCount = info.sampleCount;
 }
 
-void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
+void HL2VRInterop::Submit_PrePresentCallBack(uint64_t vrFrameId, Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
 {
-	if (!m_initialized || (!m_timingInfoSubmitted && !m_loadingScreenModeEnabled))
+	if (!m_initialized)
 		return;
 
-	if (m_vrCompositor->CanRenderScene() && vrColorImage != nullptr && !m_loadingScreenModeEnabled) {
+	if (m_vrCompositor->CanRenderScene() && vrColorImage != nullptr && m_submit_frameSubmitId == vrFrameId && !m_loadingScreenModeEnabled) {
 		static vr::VRTextureBounds_t leftBounds = {0.0f, 0.0f, 0.5f, 1.0f};
 		static vr::VRTextureBounds_t rightBounds = {0.5f, 0.0f, 1.0f, 1.0f};
 
 		vr::VRVulkanTextureData_t colorTexData, depthTexData;
-		FillTextureData(vrColorImage, colorTexData);
+		Submit_FillTextureData(vrColorImage, colorTexData);
 		vr::VRTextureWithPoseAndDepth_t submitInfo;
 		submitInfo.eType = vr::TextureType_Vulkan;
 		submitInfo.eColorSpace = vr::ColorSpace_Auto;
@@ -289,7 +257,7 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 		if (vrDepthImage != nullptr)
 		{
 			flags |= vr::Submit_TextureWithDepth;
-			FillTextureData(vrDepthImage, depthTexData);
+			Submit_FillTextureData(vrDepthImage, depthTexData);
 			submitInfo.depth.handle = (void*)&depthTexData;
 			submitInfo.depth.mProjection = m_projectionLeft;
 			submitInfo.depth.vRange.v[0] = 0;
@@ -309,7 +277,7 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 	if (vrHudImage != nullptr && m_overlayHandle != 0)
 	{
 		vr::VRVulkanTextureData_t hudTexData;
-		FillTextureData(vrHudImage, hudTexData);
+		Submit_FillTextureData(vrHudImage, hudTexData);
 		vr::Texture_t hudTexInfo;
 		hudTexInfo.eType = vr::TextureType_Vulkan;
 		hudTexInfo.handle = (void*)&hudTexData;
@@ -318,55 +286,50 @@ void HL2VRInterop::PrePresentCallBack(Rc<DxvkImage> vrColorImage, Rc<DxvkImage> 
 	}
 }
 
-void HL2VRInterop::PostPresentCallback(uint64_t vrFrameId)
+void HL2VRInterop::Submit_PostPresentCallback(uint64_t vrFrameId)
 {
-	if (!m_initialized || m_loadingScreenModeEnabled)
+	if (!m_initialized || vrFrameId == 0)
 		return;
 
-	m_vrCompositor->PostPresentHandoff();
+	if (m_submit_frameSubmitId == vrFrameId) // only do this if we submitted timing info
+	{
+		m_vrCompositor->PostPresentHandoff();
+	}
 
 	std::unique_lock lock(m_frameSyncMutex);
-	m_timingInfoSubmitted = false;
-	m_framePresented = vrFrameId;
-	m_condFramePresented.notify_one();
+	m_submit_frameHandoffId = vrFrameId;
+	m_condFrameHandedOff.notify_one();
 }
 
-void HL2VRInterop::OnSetRenderTarget(IDirect3DSurface9 *rt)
+void HL2VRInterop::Mat_OnSetRenderTarget(IDirect3DSurface9 *rt)
 {
 	if (!m_initialized || m_loadingScreenModeEnabled || rt == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;
 	rt->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_colorTex == nullptr)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_mat_colorTex == nullptr)
 	{
-		m_colorTex = rt;
-
-		// on first set of our render texture, consider this the start of our frame rendering
-		UpdateFoveationTexture();
-		std::unique_lock lock(m_frameSyncMutex);
-		m_frameRenderingStarted = m_frameStarted.load();
-		m_headsetPose = m_headsetPoseForRendering;
-		m_condFrameRenderStarted.notify_one();
+		m_mat_colorTex = rt;
 	}
-	else if (desc.Width == 1281 && desc.Height == 720 && m_hudTex == nullptr)
+	else if (desc.Width == 1281 && desc.Height == 720 && m_mat_hudTex == nullptr)
 	{
-		m_hudTex = rt;
+		m_mat_hudTex = rt;
 	}
 
-	UpdateFoveationMode(m_colorTex == rt);
+	UpdateFoveationMode(m_mat_colorTex == rt);
 }
 
-void HL2VRInterop::OnSetDepthStencil(IDirect3DSurface9 *depth)
+void HL2VRInterop::Mat_OnSetDepthStencil(IDirect3DSurface9 *depth)
 {
 	if (!m_initialized || m_loadingScreenModeEnabled || depth == nullptr)
 		return;
 
 	D3DSURFACE_DESC desc;
 	depth->GetDesc(&desc);
-	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_depthTex == nullptr)
+	if (desc.Width == m_renderWidth && desc.Height == m_renderHeight && m_mat_depthTex == nullptr)
 	{
-		m_depthTex = depth;
+		m_mat_depthTex = depth;
 	}
 }
 
@@ -414,7 +377,7 @@ void HL2VRInterop::UpdateFoveationMode(bool shouldEnable)
 		m_device->m_d3d9VRS.Disable();
 }
 
-void HL2VRInterop::UpdateFoveationTexture()
+void HL2VRInterop::Mat_UpdateFoveationTexture()
 {
 	if (m_device == nullptr)
 		return;
@@ -506,7 +469,7 @@ void HL2VRInterop::UpdateFoveationTexture()
 	}
 }
 
-void HL2VRInterop::ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth)
+void HL2VRInterop::Mat_ResolveAndTransitionTexture(IDirect3DSurface9* texture, bool isDepth)
 {
 	auto *commonTex = static_cast<D3D9Surface*>(texture)->GetCommonTexture();
 	VkImageAspectFlags aspect = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
