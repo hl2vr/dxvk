@@ -6831,6 +6831,7 @@ namespace dxvk {
   }
 
   bool DxvkContext::checkAsyncCompilationCompat() const {
+  	return true;
     for (uint32_t i = 0; i < m_state.om.framebufferInfo.numAttachments(); i++) {
       const auto& [view] = m_state.om.framebufferInfo.getAttachment(i);
       if (!view->getRtBindingAsyncCompilationCompat())
