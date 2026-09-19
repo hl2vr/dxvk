@@ -193,6 +193,11 @@ namespace dxvk {
             trackedPresentId = entry.latency.frameId;
             trackedSubmitId = 0u;
           }
+
+        	if (g_pVkSubmitThreadCallback != nullptr)
+        	{
+        		g_pVkSubmitThreadCallback->Submit_PostPresentCallback(entry.present.vrFrameId);
+        	}
         }
 
         if (m_callback)
@@ -205,11 +210,6 @@ namespace dxvk {
 
       if (entry.status)
         entry.status->result = entry.result;
-
-      if (g_pVkSubmitThreadCallback != nullptr)
-      {
-    	g_pVkSubmitThreadCallback->Submit_PostPresentCallback(entry.present.vrFrameId);
-      }
 
       // On success, pass it on to the queue thread
       { std::unique_lock<dxvk::mutex> lock(m_mutex);

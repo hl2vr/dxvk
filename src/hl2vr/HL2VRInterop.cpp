@@ -238,7 +238,7 @@ void HL2VRInterop::Submit_FillTextureData(Rc<DxvkImage> image, vr::VRVulkanTextu
 
 void HL2VRInterop::Submit_PrePresentCallBack(uint64_t vrFrameId, Rc<DxvkImage> vrColorImage, Rc<DxvkImage> vrDepthImage, Rc<DxvkImage> vrHudImage, float* vrHmdPose)
 {
-	if (!m_initialized)
+	if (!m_initialized || m_device == nullptr)
 		return;
 
 	if (m_vrCompositor->CanRenderScene() && vrColorImage != nullptr && m_submit_frameSubmitId == vrFrameId && !m_loadingScreenModeEnabled) {
