@@ -17,6 +17,7 @@ public:
 	void Shutdown() override;
 
 	void SetLoadingScreenMode(bool enable) override;
+	void EnableDepthTextureSubmission(bool enable) override;
 
 	void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) override;
 
@@ -54,6 +55,7 @@ private:
 	vr::IVROverlay* m_vrOverlay = nullptr;
 	vr::VROverlayHandle_t m_overlayHandle = 0;
 	std::atomic<bool> m_loadingScreenModeEnabled = false;
+	std::atomic<bool> m_enableDepthSubmission = false;
 
 	Com<D3D9DeviceEx> m_device;
 	Com<IDirect3DSurface9> m_mat_colorTex;

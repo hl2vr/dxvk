@@ -44,6 +44,11 @@ void HL2VRInterop::SetLoadingScreenMode(bool enable)
 	m_loadingScreenModeEnabled = enable;
 }
 
+void HL2VRInterop::EnableDepthTextureSubmission(bool enable)
+{
+	m_enableDepthSubmission = enable;
+}
+
 void HL2VRInterop::ResetRenderTextures(uint32_t width, uint32_t height, int msaa)
 {
 	m_renderWidth = width;
@@ -254,7 +259,7 @@ void HL2VRInterop::Submit_PrePresentCallBack(uint64_t vrFrameId, Rc<DxvkImage> v
 		memcpy(&submitInfo.mDeviceToAbsoluteTracking.m[0][0], vrHmdPose, sizeof(submitInfo.mDeviceToAbsoluteTracking));
 
 		int flags = vr::Submit_TextureWithPose;
-		if (vrDepthImage != nullptr)
+		if (vrDepthImage != nullptr && m_enableDepthSubmission)
 		{
 			flags |= vr::Submit_TextureWithDepth;
 			Submit_FillTextureData(vrDepthImage, depthTexData);

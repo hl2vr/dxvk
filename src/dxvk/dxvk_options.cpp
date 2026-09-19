@@ -13,7 +13,7 @@ namespace dxvk {
     useRawSsbo            = config.getOption<Tristate>("dxvk.useRawSsbo",             Tristate::Auto);
     hud                   = config.getOption<std::string>("dxvk.hud", "");
     tearFree              = config.getOption<Tristate>("dxvk.tearFree",               Tristate::Auto);
-    latencySleep          = config.getOption<Tristate>("dxvk.latencySleep",           Tristate::Auto);
+    latencySleep          = config.getOption<Tristate>("dxvk.latencySleep",           Tristate::False);
     latencyTolerance      = config.getOption<int32_t> ("dxvk.latencyTolerance",       1000);
     disableNvLowLatency2  = config.getOption<Tristate>("dxvk.disableNvLowLatency2",   Tristate::Auto);
     hideIntegratedGraphics = config.getOption<bool>   ("dxvk.hideIntegratedGraphics", false);

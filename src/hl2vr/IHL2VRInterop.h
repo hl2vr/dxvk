@@ -20,6 +20,7 @@ public:
     virtual void Shutdown() = 0;
 
 	virtual void SetLoadingScreenMode(bool enable) = 0;
+	virtual void EnableDepthTextureSubmission(bool enable) = 0;
 
     virtual void ResetRenderTextures(uint32_t width, uint32_t height, int msaa) = 0;
 
